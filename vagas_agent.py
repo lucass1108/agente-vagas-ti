@@ -30,7 +30,7 @@ except ImportError:
 # CONFIG
 # ============================================================
 CONFIG = {
-    "vault_path": r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI",
+    "vault_path": ".",
     "note_name": "Vagas TI - Lucas.md",
     "history_file": "vagas_history.json",
     "email_enabled": True,
