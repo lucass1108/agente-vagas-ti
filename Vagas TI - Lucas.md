@@ -6,7 +6,7 @@ novas: 0
 ---
 
 # Vagas TI — Lucas Barbosa Pedro
-> Relatório gerado em 05/11/2026 22:18 · Busca automática v2.0
+> Relatório gerado em 05/11/2026 23:14 · Busca automática v2.0
 > Total: 37 vagas · Novas: 0 · Top: 0 · Médias: 0
 
 ## 🟢 Top Matches (score ≥ 70)
@@ -68,5 +68,5 @@ novas: 0
 
 ---
 > Total: 37 · Novas: 0 · Top: 0 · Médias: 0 · Baixos: 37
-> Última execução: 2026-11-05T22:13:25.549276
+> Última execução: 2026-11-05T22:18:17.552272
 > Para rodar novamente: `python vagas_agent.py`
