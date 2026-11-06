@@ -1,0 +1,69 @@
+filters:
+  and:
+    - file.hasTag("vaga")
+    - file.inFolder("Vagas")
+
+formulas:
+  score_label: 'if(score >= 70, "🟢 Top", if(score >= 40, "🟡 Médio", "🔴 Baixo"))'
+  dias_sem_resposta: '(now() - file.ctime).days'
+
+properties:
+  score:
+    displayName: Score
+  status:
+    displayName: Status
+  fonte:
+    displayName: Fonte
+  empresa:
+    displayName: Empresa
+
+views:
+  - type: table
+    name: "Todas as Vagas"
+    order:
+      - file.name
+      - score
+      - status
+      - fonte
+      - empresa
+    sort:
+      - property: score
+        direction: DESC
+
+  - type: table
+    name: "Top Matches (≥70)"
+    filters:
+      and:
+        - score >= 70
+    sort:
+      - property: score
+        direction: DESC
+
+  - type: table
+    name: "Candidaturas Ativas"
+    filters:
+      and:
+        - status != "nao_candidatado"
+        - status != "rejeitado"
+    sort:
+      - property: file.ctime
+        direction: DESC
+
+  - type: cards
+    name: "Cards por Score"
+    order:
+      - file.name
+      - score
+    sort:
+      - property: score
+        direction: DESC
+
+  - type: table
+    name: "Follow-up (7+ dias)"
+    filters:
+      and:
+        - status == "candidatado"
+        - '(now() - file.ctime).days >= 7'
+    sort:
+      - property: file.ctime
+        direction: ASC

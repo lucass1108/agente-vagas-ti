@@ -1,0 +1,25 @@
+﻿# Ignorar tudo exceto os arquivos do projeto
+*
+!vagas_agent.py
+!README.md
+!requirements.txt
+!.gitignore
+!LICENSE
+!Vagas TI - Agente Lucas.md
+!.github/
+!.github/workflows/
+!.github/workflows/vagas.yml
+!Vagas Dashboard.base
+
+# Python
+__pycache__/
+*.pyc
+
+# Histórico local
+vagas_history.json
+candidaturas.json
+salarios.json
+
+# Secrets
+.env
+config.local.py
