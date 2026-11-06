@@ -55,43 +55,46 @@ if page == "🔍 Buscar Vagas":
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🔍 Buscar Vagas Agora", type="primary"):
-            with st.spinner("Buscando vagas..."):
-                jobs = search_jobs()
-                jobs = deduplicate(jobs)
-                history = load_history()
-                new_jobs = get_new_jobs(jobs, history)
-                save_history(jobs)
+            with st.spinner("Buscando vagas... (pode levar até 30s)"):
+                try:
+                    jobs = search_jobs()
+                    jobs = deduplicate(jobs)
+                    history = load_history()
+                    new_jobs = get_new_jobs(jobs, history)
+                    save_history(jobs)
 
-                st.success(f"✅ {len(jobs)} vagas encontradas! ({len(new_jobs)} novas)")
+                    if len(jobs) == 0:
+                        st.warning("⚠️ Nenhuma vaga encontrada. O servidor pode estar bloqueando requisições externas. Tente rodar localmente.")
+                    else:
+                        st.success(f"✅ {len(jobs)} vagas encontradas! ({len(new_jobs)} novas)")
+                except Exception as e:
+                    st.error(f"❌ Erro na busca: {str(e)}")
+                    st.info("💡 Dica: A busca pode não funcionar no Streamlit Cloud devido a restrições de rede. Rode localmente com `python vagas_agent.py` ou use o GitHub Actions.")
+                    jobs = []
+                    new_jobs = []
 
-                # Top vagas
-                scored = sorted(jobs, key=score_job, reverse=True)
-                st.subheader(f"🟢 Top Matches ({len([j for j in scored if score_job(j) >= 70])})")
-                for job in [j for j in scored if score_job(j) >= 70][:10]:
-                    s = score_job(job)
-                    color = "green" if s >= 70 else "orange"
-                    with st.expander(f"[{s}] {job['title'][:60]}"):
-                        st.markdown(f"**Score:** {s}/100")
-                        st.markdown(f"**Fonte:** {job.get('source', '?')}")
-                        st.markdown(f"**Descrição:** {job['description'][:200]}")
-                        st.markdown(f"**Link:** [{job['link']}]({job['link']})")
+                if jobs:
+                    # Top vagas
+                    scored = sorted(jobs, key=score_job, reverse=True)
+                    st.subheader(f"🟢 Top Matches ({len([j for j in scored if score_job(j) >= 70])})")
+                    for job in [j for j in scored if score_job(j) >= 70][:10]:
+                        s = score_job(job)
+                        with st.expander(f"[{s}] {job['title'][:60]}"):
+                            st.markdown(f"**Score:** {s}/100")
+                            st.markdown(f"**Fonte:** {job.get('source', '?')}")
+                            st.markdown(f"**Descrição:** {job['description'][:200]}")
+                            st.markdown(f"**Link:** [{job['link']}]({job['link']})")
 
-                        # Botão para registrar candidatura
-                        if st.button(f"Registrar candidatura", key=f"reg_{job['title'][:20]}"):
-                            track_application(
-                                title=job["title"],
-                                status="candidatado",
-                                link=job["link"],
-                                score=s,
-                            )
-                            st.success("Candidatura registrada!")
+                            if st.button(f"Registrar candidatura", key=f"reg_{job['title'][:20]}"):
+                                track_application(title=job["title"], status="candidatado", link=job["link"], score=s)
+                                st.success("Candidatura registrada!")
 
-                st.subheader(f"🟡 Matches Médios ({len([j for j in scored if 40 <= score_job(j) < 70])})")
-                for job in [j for j in scored if 40 <= score_job(j) < 70][:10]:
-                    s = score_job(job)
-                    with st.expander(f"[{s}] {job['title'][:60]}"):
-                        st.markdown(f"**Score:** {s}/100 | **Fonte:** {job.get('source', '?')}")
-                        st.markdown(f"**Link:** [{job['link']}]({job['link']})")
+                    st.subheader(f"🟡 Matches Médios ({len([j for j in scored if 40 <= score_job(j) < 70])})")
+                    for job in [j for j in scored if 40 <= score_job(j) < 70][:10]:
+                        s = score_job(job)
+                        with st.expander(f"[{s}] {job['title'][:60]}"):
+                            st.markdown(f"**Score:** {s}/100 | **Fonte:** {job.get('source', '?')}")
+                            st.markdown(f"**Link:** [{job['link']}]({job['link']})")
 
     with col2:
         st.subheader("🆕 Vagas Novas")
