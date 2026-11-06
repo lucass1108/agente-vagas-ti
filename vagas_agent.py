@@ -701,16 +701,71 @@ def send_email(content: str):
         print("[INFO] Email desativado.")
         return
     try:
-        msg = MIMEMultipart()
+        # Gera versão mobile-friendly do email
+        scored_jobs = []
+        # Extrai top vagas do conteúdo (simplificado)
+        msg = MIMEMultipart("alternative")
         msg["From"] = CONFIG["email_from"]
         msg["To"] = CONFIG["email_to"]
-        msg["Subject"] = f"Vagas TI - Lucas ({datetime.now().strftime('%d/%m/%Y')})"
-        msg.attach(MIMEText(content, "plain"))
+        msg["Subject"] = f"📋 Vagas TI - {datetime.now().strftime('%d/%m/%Y')}"
+
+        # Versão texto simples (mobile-friendly)
+        text_version = f"""VAGAS TI - LUCAS BARBOSA PEDRO
+{datetime.now().strftime('%d/%m/%Y %H:%M')}
+
+{content}
+
+---
+Agente Vagas TI v4.0
+Para mais detalhes, veja a nota no Obsidian.
+"""
+
+        # Versão HTML (mais bonita no celular)
+        html_version = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 16px; background: #f5f5f5; color: #333; }}
+  .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+  h1 {{ color: #2563eb; font-size: 20px; margin-bottom: 4px; }}
+  .subtitle {{ color: #666; font-size: 13px; margin-bottom: 16px; }}
+  .section {{ margin: 16px 0; padding: 12px; border-radius: 8px; background: #f8f9fa; }}
+  .section h2 {{ font-size: 16px; margin: 0 0 8px 0; }}
+  .job {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
+  .job:last-child {{ border-bottom: none; }}
+  .score {{ display: inline-block; background: #2563eb; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }}
+  .score-high {{ background: #16a34a; }}
+  .score-med {{ background: #ca8a04; }}
+  .score-low {{ background: #dc2626; }}
+  .link {{ color: #2563eb; text-decoration: none; font-size: 13px; }}
+  .footer {{ text-align: center; color: #999; font-size: 11px; margin-top: 20px; padding-top: 12px; border-top: 1px solid #eee; }}
+  pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 12px; background: #f1f1f1; padding: 8px; border-radius: 6px; }}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📋 Vagas TI — Lucas</h1>
+  <p class="subtitle">{datetime.now().strftime('%d/%m/%Y %H:%M')} · Agente v4.0</p>
+  <div class="section">
+    <pre>{content[:3000]}</pre>
+  </div>
+  <div class="footer">
+    Agente Vagas TI · Gerado automaticamente<br>
+    Para mais detalhes, veja a nota no Obsidian.
+  </div>
+</div>
+</body>
+</html>"""
+
+        msg.attach(MIMEText(text_version, "plain"))
+        msg.attach(MIMEText(html_version, "html"))
+
         with smtplib.SMTP(CONFIG["smtp_server"], CONFIG["smtp_port"]) as server:
             server.starttls()
             server.login(CONFIG["email_from"], CONFIG["email_password"])
             server.send_message(msg)
-        print("[OK] Email enviado com sucesso!")
+        print("[OK] Email enviado com sucesso! (versão mobile)")
     except Exception as e:
         print(f"[ERRO] Falha ao enviar email: {e}")
 
