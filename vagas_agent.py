@@ -49,7 +49,7 @@ except ImportError:
 # CONFIG
 # ============================================================
 CONFIG = {
-    "vault_path": os.environ.get("VAULT_PATH", r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI"),
+    "vault_path": os.environ.get("VAULT_PATH", os.getcwd() if not os.path.exists(r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI") else r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI"),
     "note_name": "Vagas TI - Lucas.md",
     "history_file": "vagas_history.json",
     "applications_file": "candidaturas.json",
