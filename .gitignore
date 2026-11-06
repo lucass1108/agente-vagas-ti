@@ -6,10 +6,12 @@
 !.gitignore
 !LICENSE
 !Vagas TI - Agente Lucas.md
+!Vagas Dashboard.base
+!streamlit_app.py
+!telegram_bot.py
 !.github/
 !.github/workflows/
 !.github/workflows/vagas.yml
-!Vagas Dashboard.base
 
 # Python
 __pycache__/
