@@ -2,14 +2,14 @@ name: Agente Vagas TI
 
 on:
   schedule:
-    - cron: '0 11 * * 1-5'  # Seg-Sex 8h BRT (11h UTC)
-  workflow_dispatch:  # Execução manual
+    - cron: '0 11 * * 1-5'
+  workflow_dispatch:
 
 jobs:
   buscar-vagas:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout do repositório
+      - name: Checkout do repositorio
         uses: actions/checkout@v4
 
       - name: Configurar Python
@@ -17,16 +17,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Instalar dependências
+      - name: Instalar dependencias
         run: pip install -r requirements.txt
 
       - name: Rodar agente de vagas
         env:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          VAULT_PATH: ${{ github.workspace }}
         run: python vagas_agent.py --email
 
       - name: Commit resultados
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "📊 Atualizar vagas TI — $(date +'%d/%m/%Y')"
-          file_pattern: "*.md vagas_history.json"
+          commit_message: "Atualizar vagas TI"
+          file_pattern: "*.md vagas_history.json candidaturas.json"
