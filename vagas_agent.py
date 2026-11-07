@@ -196,6 +196,12 @@ def score_job(job: dict) -> int:
         score -= 10
     if not any(kw in text for kw in PROFILE["level_keywords"]):
         score -= 20
+    ti_check = ["ti", "tecnologia", "informatica", "suporte", "desenvolvimento",
+                "programacao", "dados", "infraestrutura", "sistemas",
+                "computacao", "help desk", "analista", "dev", "software",
+                "hardware", "redes", "banco de dados", "python", "sql", "flask", "mysql"]
+    if not any(kw in text for kw in ti_check):
+        score -= 40
 
     return max(0, min(100, score))
 
@@ -238,6 +244,14 @@ def search_bing(query):
         title = title_el.get_text(strip=True)
         link = title_el.get("href", "")
         snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+        combined = (title + " " + snippet).lower()
+        # Filtra apenas vagas de TI
+        ti_keywords = ["ti", "tecnologia", "informática", "informatica", "suporte", "desenvolvimento",
+                       "programação", "programacao", "dados", "infraestrutura", "sistemas",
+                       "computação", "computacao", "help desk", "analista", "dev", "software",
+                       "hardware", "redes", "banco de dados", "python", "sql", "flask", "mysql"]
+        if not any(kw in combined for kw in ti_keywords):
+            continue
         results.append({"title": title, "link": link, "description": snippet, "source": "Bing"})
     return results
 
@@ -279,7 +293,13 @@ def search_jobs() -> list[dict]:
                 if len(text) < 10 or len(text) > 120:
                     continue
                 combined = text.lower()
-                if not any(kw in combined for kw in PROFILE["level_keywords"] + PROFILE["area_keywords"]):
+                ti_keywords = ["ti", "tecnologia", "informática", "informatica", "suporte", "desenvolvimento",
+                               "programação", "programacao", "dados", "infraestrutura", "sistemas",
+                               "computação", "computacao", "help desk", "analista", "dev", "software",
+                               "hardware", "redes", "banco de dados", "python", "sql", "flask", "mysql"]
+                if not any(kw in combined for kw in ti_keywords):
+                    continue
+                if not any(kw in combined for kw in PROFILE["level_keywords"]):
                     continue
                 key = text.lower().strip()
                 if key in seen:
