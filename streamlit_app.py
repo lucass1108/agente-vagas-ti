@@ -218,18 +218,25 @@ def search_bing(query):
         results.append({"title": title, "link": link, "description": snippet, "source": "Bing"})
     return results
 
-def search_jobs(skills):
-    queries = [
-        "jovem aprendiz ti São Paulo",
-        "estágio ti suporte São Paulo",
-        "estágio desenvolvimento python São Paulo",
-        "estágio dados São Paulo",
-        "jovem aprendiz suporte técnico São Paulo",
-        "estágio help desk São Paulo",
-    ]
+def search_jobs(skills, area=""):
+    area_queries = {
+        "Jovem Aprendiz TI": ["jovem aprendiz ti São Paulo", "jovem aprendiz tecnologia São Paulo", "jovem aprendiz informatica São Paulo"],
+        "Estagio Suporte Tecnico": ["estágio suporte técnico São Paulo", "estágio suporte ti São Paulo", "estágio help desk São Paulo"],
+        "Estagio Desenvolvimento (Backend)": ["estágio desenvolvimento backend São Paulo", "estágio desenvolvedor python São Paulo", "estágio back-end São Paulo"],
+        "Estagio Desenvolvimento (Frontend)": ["estágio desenvolvimento frontend São Paulo", "estágio desenvolvedor web São Paulo", "estágio frontend react São Paulo"],
+        "Estagio Desenvolvimento (Full Stack)": ["estágio desenvolvimento full stack São Paulo", "estágio desenvolvedor fullstack São Paulo"],
+        "Estagio Dados / BI": ["estágio dados São Paulo", "estágio analista dados São Paulo", "estágio business intelligence São Paulo"],
+        "Estagio Infraestrutura / Redes": ["estágio infraestrutura São Paulo", "estágio redes São Paulo", "estágio infra ti São Paulo"],
+        "Estagio Help Desk": ["estágio help desk São Paulo", "estágio suporte técnico São Paulo"],
+        "Estagio Analista de Sistemas": ["estágio analista sistemas São Paulo", "estágio analista ti São Paulo"],
+        "Trainee TI": ["trainee ti São Paulo", "trainee tecnologia São Paulo"],
+    }
+    queries = area_queries.get(area, ["estágio ti São Paulo", "jovem aprendiz ti São Paulo"])
     # Adiciona skills do currículo às queries
     for skill in skills[:3]:
         queries.append(f"estágio {skill} São Paulo")
+    if area and area not in area_queries:
+        queries.insert(0, f"estágio {area} São Paulo")
 
     jobs = []
     seen = set()
@@ -310,6 +317,28 @@ if page == "Meu Curriculo":
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        st.subheader("Qual area/vaga voce busca?")
+        area_options = [
+            "Jovem Aprendiz TI",
+            "Estagio Suporte Tecnico",
+            "Estagio Desenvolvimento (Backend)",
+            "Estagio Desenvolvimento (Frontend)",
+            "Estagio Desenvolvimento (Full Stack)",
+            "Estagio Dados / BI",
+            "Estagio Infraestrutura / Redes",
+            "Estagio Help Desk",
+            "Estagio Analista de Sistemas",
+            "Trainee TI",
+            "Outro (personalizado)",
+        ]
+        selected_area = st.selectbox("Selecione a area desejada:", area_options)
+        if selected_area == "Outro (personalizado)":
+            custom_area = st.text_input("Digite a area/vaga desejada:")
+            selected_area = custom_area if custom_area else "Estagio TI"
+
+        st.session_state.selected_area = selected_area
+        st.info(f"Area selecionada: {selected_area}")
+
         resume_input = st.text_area(
             "Cole seu curriculo aqui:",
             value=st.session_state.resume_text,
@@ -360,7 +389,8 @@ elif page == "Buscar Vagas":
 
     if st.button("Buscar Vagas Agora", type="primary"):
         with st.spinner("Buscando vagas... (pode levar ate 30s)"):
-            jobs = search_jobs(skills)
+            area = st.session_state.get("selected_area", "")
+            jobs = search_jobs(skills, area)
             st.session_state.jobs = jobs
             st.session_state.searched = True
 
