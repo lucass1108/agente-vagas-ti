@@ -1074,6 +1074,12 @@ elif page == "Chat":
 
     def chatbot_response(msg):
         msg_lower = msg.lower().strip()
+        # Segredo do bbzinho
+        secret_names = ["ana luiza", "ana luiza ferreira", "ana luiza ferreira pires", "ana", "luiza"]
+        if any(name in msg_lower for name in secret_names):
+            return "Oi lu, sou o bb do lucas, ele gosta muitoooooode vc e esta com sdds, ele me falou aqui 💕"
+        if msg_lower in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oiii", "oii", "oiiii"]:
+            return "oiii eu sou o bbzinhoooooooooo, qual seu nome?"
         if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
             return "Ola! Eu sou o bbzinho, seu assistente de vagas! Como posso ajudar? Use /ajuda para ver os comandos."
         if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
