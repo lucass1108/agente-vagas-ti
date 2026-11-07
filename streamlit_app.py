@@ -3,7 +3,81 @@ import json
 import os
 import sys
 import re
+import time
 from datetime import datetime
+
+# ============================================================
+# GEMINI AI (gratuito)
+# ============================================================
+GEMINI_API_KEY = None
+try:
+    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+except Exception:
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# Rate limiting para Gemini free tier (15 req/min)
+if "gemini_last_call" not in st.session_state:
+    st.session_state.gemini_last_call = 0
+if "gemini_call_count" not in st.session_state:
+    st.session_state.gemini_call_count = 0
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+def gemini_available():
+    """Verifica se pode fazer chamada ao Gemini (rate limit)."""
+    now = time.time()
+    # Reset contador a cada minuto
+    if now - st.session_state.gemini_last_call > 60:
+        st.session_state.gemini_call_count = 0
+    if st.session_state.gemini_call_count >= 14:
+        wait = 60 - (now - st.session_state.gemini_last_call)
+        return False, max(0, int(wait))
+    return True, 0
+
+def call_gemini(prompt, context=""):
+    """Chama a API do Gemini (gratuito)."""
+    if not GEMINI_API_KEY:
+        return "Chave do Gemini nao configurada. Adicione GEMINI_API_KEY nos Secrets do Streamlit."
+
+    available, wait = gemini_available()
+    if not available:
+        return f"Limite de requisições atingido. Aguarde {wait} segundos e tente novamente."
+
+    try:
+        import urllib.request
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        full_prompt = f"""Voce e um assistente de carreira especializado em vagas de TI para Lucas Barbosa Pedro.
+
+PERFIL DO LUCAS:
+- Nome: Lucas Barbosa Pedro
+- Localizacao: Sao Paulo - SP
+- Formacao: ADS (UNIFECAF, 2 semestre)
+- Skills: Python, SQL, Flask, MySQL, Git, HTML/CSS, Windows, Redes, Linux
+- Experiencia: Backoffice/Atendimento (Sercom/Claro) desde jan/2026
+- Projetos: FinanceTracker (Python+Flask+MySQL), BrutalFit Expo (Python+MySQL)
+- Diferenciais: Medalhista CUCO/USP (ouro), OBMEP, OMASP; ingles intermediario
+- Objetivo: Jovem Aprendiz / Estagio em TI (suporte, dados ou desenvolvimento)
+
+{context}
+
+Responda de forma concisa e util. Use portugues brasileiro.
+
+Pergunta do usuario: {prompt}"""
+
+        data = json.dumps({
+            "contents": [{"parts": [{"text": full_prompt}]}],
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
+        }).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req, timeout=30)
+        result = json.loads(resp.read())
+        text = result["candidates"][0]["content"]["parts"][0]["text"]
+
+        st.session_state.gemini_last_call = time.time()
+        st.session_state.gemini_call_count += 1
+        return text
+    except Exception as e:
+        return f"Erro ao chamar Gemini: {str(e)}"
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -289,6 +363,7 @@ with st.sidebar:
             "Prep Entrevista",
             "Curriculo Personalizado",
             "Analytics",
+            "Agente IA",
             "Acesso Admin",
         ], label_visibility="collapsed")
     else:
@@ -319,6 +394,97 @@ else:
         <p>Encontre vagas de Jovem Aprendiz e Estagio em TI em Sao Paulo</p>
     </div>
     """, unsafe_allow_html=True)
+
+# ============================================================
+# PÁGINA: AGENTE IA (ADMIN)
+# ============================================================
+elif page == "Agente IA":
+    if not st.session_state.admin_mode:
+        st.error("Acesso restrito. Va para 'Acesso Admin' e insira sua chave.")
+    else:
+        st.title("Agente IA - Assistente de Carreira")
+        st.markdown("Converse com o agente de IA para obter ajuda com vagas, candidaturas, entrevistas e carreira.")
+
+        # Contexto atual
+        context_parts = []
+        try:
+            from vagas_agent import load_applications, load_history, get_application_stats, get_followup_reminders
+            apps = load_applications()
+            history = load_history()
+            reminders = get_followup_reminders()
+            stats = get_application_stats()
+
+            context_parts.append(f"CANDIDATURAS: {len(apps)} total, {stats['taxa_resposta']}% taxa de resposta")
+            if apps:
+                for app in apps[:5]:
+                    context_parts.append(f"  - {app['vaga']} ({app.get('empresa','N/A')}) - Status: {app['status']}")
+            if reminders:
+                context_parts.append(f"FOLLOW-UPS PENDENTES: {len(reminders)}")
+                for app, days in reminders:
+                    context_parts.append(f"  - {app['vaga']} ({days} dias sem resposta)")
+            context_parts.append(f"VAGAS VISTAS: {len(history.get('seen', []))}")
+        except Exception:
+            pass
+
+        if st.session_state.jobs:
+            jobs = st.session_state.jobs
+            context_parts.append(f"VAGAS ENCONTRADAS NA ULTIMA BUSCA: {len(jobs)}")
+            top = sorted(jobs, key=lambda j: __import__('vagas_agent').score_job_generic(j, st.session_state.resume_skills), reverse=True)[:5]
+            for job in top:
+                context_parts.append(f"  - {job['title'][:50]} (score: {__import__('vagas_agent').score_job_generic(job, st.session_state.resume_skills)})")
+
+        if st.session_state.resume_skills:
+            context_parts.append(f"SKILLS DO CURRICULO: {', '.join(st.session_state.resume_skills)}")
+
+        context = "\n".join(context_parts)
+
+        # Botoes de acao rapida
+        st.subheader("Acoes rapidas")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            if st.button("Buscar vagas"):
+                st.session_state.chat_history.append({"role": "user", "content": "Busque vagas de TI em Sao Paulo para mim"})
+                st.rerun()
+        with col2:
+            if st.button("Ver candidaturas"):
+                st.session_state.chat_history.append({"role": "user", "content": "Liste minhas candidaturas e estatisticas"})
+                st.rerun()
+        with col3:
+            if st.button("Follow-ups"):
+                st.session_state.chat_history.append({"role": "user", "content": "Quais candidaturas precisam de follow-up?"})
+                st.rerun()
+        with col4:
+            if st.button("Limpar chat"):
+                st.session_state.chat_history = []
+                st.rerun()
+
+        # Exibir historico do chat
+        st.subheader("Chat")
+        chat_container = st.container()
+        with chat_container:
+            for msg in st.session_state.chat_history:
+                if msg["role"] == "user":
+                    st.markdown(f"**Voce:** {msg['content']}")
+                else:
+                    st.markdown(f"**Agente:** {msg['content']}")
+                st.markdown("---")
+
+        # Input do usuario
+        user_input = st.text_input("Digite sua pergunta:", key="chat_input", placeholder="Ex: Quais vagas sao mais compatíveis com meu perfil?")
+        if st.button("Enviar") and user_input.strip():
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+
+            with st.spinner("Pensando..."):
+                response = call_gemini(user_input, context)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            st.rerun()
+
+        # Status do Gemini
+        available, wait = gemini_available()
+        if not available:
+            st.warning(f"Limite de requisicoes atingido. Aguarde {wait}s.")
+        else:
+            st.caption(f"Gemini gratuito - {14 - st.session_state.gemini_call_count} requisicoes restantes neste minuto")
 
 # ============================================================
 # PÁGINA: ACESSO ADMIN
