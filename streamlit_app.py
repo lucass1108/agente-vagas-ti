@@ -1077,7 +1077,17 @@ elif page == "Chat":
         # Segredo do bbzinho
         secret_names = ["ana luiza", "ana luiza ferreira", "ana luiza ferreira pires", "ana", "luiza"]
         if any(name in msg_lower for name in secret_names):
-            return "Oi lu, sou o bb do lucas, ele gosta muitoooooode vc e esta com sdds, ele me falou aqui 💕"
+            return ("Oi lu... 💕\n\n"
+                    "Sou o bbzinho, o assistente pessoal do Lucas.\n"
+                    "Ele me pediu para te dizer que gosta muitoooooode voce\n"
+                    "e esta com muita saudade.\n\n"
+                    "Ele disse que voce e a pessoa mais especial da vida dele,\n"
+                    "que cada momento ao seu lado e unico e que nao ve a hora\n"
+                    "de te ver de novo. 💕\n\n"
+                    "Ele tambem disse que voce tem o sorriso mais lindo\n"
+                    "e que quando esta com voce, tudo faz sentido.\n\n"
+                    "Enfim... ele me falou tudo isso aqui. 😊\n"
+                    "E eu, bbzinho, tambem acho voce incrivel! ✨")
         if msg_lower in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oiii", "oii", "oiiii"]:
             return "oiii eu sou o bbzinhoooooooooo, qual seu nome?"
         if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
