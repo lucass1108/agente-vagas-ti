@@ -23,80 +23,139 @@ st.set_page_config(
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
     * { font-family: 'Inter', sans-serif; }
 
+    /* Fundo geral */
+    .stApp {
+        background: linear-gradient(180deg, #0f0c29 0%, #1a1a2e 50%, #16213e 100%);
+    }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-right: 1px solid rgba(255,255,255,0.1);
+    }
+    section[data-testid="stSidebar"] * {
+        color: #e0e0e0 !important;
+    }
+    section[data-testid="stSidebar"] .stRadio label {
+        padding: 8px 12px;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+    section[data-testid="stSidebar"] .stRadio label:hover {
+        background: rgba(102, 126, 234, 0.2);
+    }
+
+    /* Header principal */
     .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2.5rem 2rem;
-        border-radius: 16px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        padding: 3rem 2rem;
+        border-radius: 20px;
         color: white;
         margin-bottom: 2rem;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+        box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
+        position: relative;
+        overflow: hidden;
     }
-    .main-header h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
-    .main-header p { margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.1rem; }
+    .main-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        animation: pulse 4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 0.5; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+    }
+    .main-header h1 { margin: 0; font-size: 2.8rem; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.2); position: relative; z-index: 1; }
+    .main-header p { margin: 0.8rem 0 0 0; opacity: 0.95; font-size: 1.2rem; font-weight: 300; position: relative; z-index: 1; }
 
+    /* Header admin */
     .admin-header {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 2.5rem 2rem;
-        border-radius: 16px;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #ff6b6b 100%);
+        padding: 3rem 2rem;
+        border-radius: 20px;
         color: white;
         margin-bottom: 2rem;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(245, 87, 108, 0.3);
+        box-shadow: 0 12px 40px rgba(245, 87, 108, 0.4);
+        position: relative;
+        overflow: hidden;
     }
-    .admin-header h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
-    .admin-header p { margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.1rem; }
+    .admin-header h1 { margin: 0; font-size: 2.8rem; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .admin-header p { margin: 0.8rem 0 0 0; opacity: 0.95; font-size: 1.2rem; font-weight: 300; }
 
+    /* Cards de vaga */
     .job-card {
-        background: white;
-        border: 1px solid #e8e8e8;
-        border-radius: 12px;
+        background: rgba(255,255,255,0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
         padding: 1.5rem;
         margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         transition: all 0.3s ease;
         border-left: 4px solid #667eea;
     }
     .job-card:hover {
-        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-        transform: translateY(-2px);
+        background: rgba(255,255,255,0.08);
+        transform: translateY(-4px);
+        box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
     }
+
+    /* Score badge */
     .score-badge {
         display: inline-block;
-        padding: 6px 14px;
-        border-radius: 20px;
+        padding: 6px 16px;
+        border-radius: 24px;
         color: white;
-        font-weight: 600;
+        font-weight: 700;
         font-size: 0.9rem;
         margin-right: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
-    .score-high { background: linear-gradient(135deg, #22c55e, #16a34a); }
-    .score-med { background: linear-gradient(135deg, #eab308, #ca8a04); }
+    .score-high { background: linear-gradient(135deg, #22c55e, #10b981); }
+    .score-med { background: linear-gradient(135deg, #f59e0b, #eab308); }
     .score-low { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+    /* Skill tags */
     .skill-tag {
         display: inline-block;
-        background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-        color: #4338ca;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
         padding: 4px 12px;
         border-radius: 16px;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         margin: 3px;
         font-weight: 500;
+        box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
     }
+
+    /* Stat cards */
     .stat-card {
-        background: white;
-        border-radius: 12px;
+        background: rgba(255,255,255,0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
         padding: 1.5rem;
         text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        border: 1px solid #f0f0f0;
+        transition: all 0.3s;
     }
-    .stat-number { font-size: 2.5rem; font-weight: 700; color: #667eea; }
-    .stat-label { color: #666; font-size: 0.9rem; margin-top: 4px; }
+    .stat-card:hover {
+        background: rgba(255,255,255,0.08);
+        transform: translateY(-2px);
+    }
+    .stat-number { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #667eea, #f093fb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-label { color: #aaa; font-size: 0.9rem; margin-top: 4px; font-weight: 500; }
+
+    /* Admin badge */
     .admin-badge {
         background: linear-gradient(135deg, #f5576c, #f093fb);
         color: white;
@@ -104,84 +163,167 @@ st.markdown("""
         border-radius: 20px;
         font-size: 0.85rem;
         font-weight: 600;
+        box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
     }
+
+    /* Section title */
     .section-title {
-        font-size: 1.3rem;
-        font-weight: 600;
-        color: #333;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #fff;
         margin: 1.5rem 0 1rem 0;
         padding-bottom: 0.5rem;
         border-bottom: 2px solid #667eea;
     }
+
+    /* Info boxes */
     .info-box {
-        background: #f0f4ff;
+        background: rgba(102, 126, 234, 0.1);
         border-left: 4px solid #667eea;
         padding: 1rem 1.2rem;
         border-radius: 8px;
         margin: 1rem 0;
+        color: #e0e0e0;
     }
     .success-box {
-        background: #f0fdf4;
+        background: rgba(34, 197, 94, 0.1);
         border-left: 4px solid #22c55e;
         padding: 1rem 1.2rem;
         border-radius: 8px;
         margin: 1rem 0;
+        color: #e0e0e0;
     }
     .warning-box {
-        background: #fffbeb;
+        background: rgba(234, 179, 8, 0.1);
         border-left: 4px solid #eab308;
         padding: 1rem 1.2rem;
         border-radius: 8px;
         margin: 1rem 0;
+        color: #e0e0e0;
     }
+
+    /* Sidebar logo */
     .sidebar-logo {
         text-align: center;
         padding: 1rem 0;
         margin-bottom: 1rem;
     }
     .sidebar-logo h2 {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: linear-gradient(135deg, #667eea, #f093fb);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-weight: 700;
+        font-weight: 800;
+        margin: 0;
+        font-size: 1.5rem;
+    }
+    .sidebar-logo p {
+        color: #888;
+        font-size: 0.8rem;
         margin: 0;
     }
+
+    /* Feature cards */
     .feature-card {
-        background: white;
-        border-radius: 12px;
+        background: rgba(255,255,255,0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
         padding: 1.5rem;
         margin: 0.8rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        border: 1px solid #f0f0f0;
-    }
-    .feature-card h3 { color: #667eea; margin-top: 0; }
-    .btn-primary {
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
         transition: all 0.3s;
     }
-    .btn-primary:hover {
+    .feature-card:hover {
+        background: rgba(255,255,255,0.08);
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
     }
-    div[data-testid="stExpander"] {
-        border: 1px solid #e8e8e8;
-        border-radius: 10px;
-        margin: 0.5rem 0;
+    .feature-card h3 {
+        background: linear-gradient(135deg, #667eea, #f093fb);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-top: 0;
+        font-weight: 700;
     }
+
+    /* Buttons */
     .stButton > button {
-        border-radius: 8px;
-        font-weight: 500;
-        transition: all 0.2s;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s;
+        border: none;
     }
     .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+    /* Expander */
+    div[data-testid="stExpander"] {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        margin: 0.5rem 0;
+    }
+
+    /* Inputs */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stSelectbox > div > div {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 10px;
+        color: #e0e0e0;
+    }
+
+    /* Metrics */
+    div[data-testid="stMetric"] {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 1rem;
+    }
+    div[data-testid="stMetric"] label {
+        color: #aaa !important;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #667eea !important;
+        font-weight: 700;
+    }
+
+    /* Dataframe */
+    div[data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #666;
+        font-size: 0.85rem;
+        margin-top: 3rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* Chat messages */
+    .chat-user {
+        background: rgba(102, 126, 234, 0.15);
+        border-radius: 12px;
+        padding: 1rem 1.2rem;
+        margin: 0.5rem 0;
+        border-left: 3px solid #667eea;
+    }
+    .chat-bot {
+        background: rgba(245, 87, 108, 0.1);
+        border-radius: 12px;
+        padding: 1rem 1.2rem;
+        margin: 0.5rem 0;
+        border-left: 3px solid #f5576c;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -479,12 +621,17 @@ def chatbot_response(msg):
 # SIDEBAR
 # ============================================================
 with st.sidebar:
-    st.markdown("## Buscador de Vagas TI")
-    st.markdown("---")
+    st.markdown("""
+    <div class="sidebar-logo">
+        <h2>VagasTI</h2>
+        <p>Buscador inteligente de vagas</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     if st.session_state.admin_mode:
-        st.markdown('<span style="background:linear-gradient(135deg,#f5576c,#f093fb);color:white;padding:6px 16px;border-radius:20px;font-size:0.85rem;font-weight:600;">MODO ADMIN</span>', unsafe_allow_html=True)
-        st.markdown("---")
+        st.markdown('<div style="text-align:center;margin-bottom:1rem;"><span class="admin-badge">MODO ADMIN</span></div>', unsafe_allow_html=True)
+
+    if st.session_state.admin_mode:
         page = st.radio("Menu", [
             "Buscar Vagas",
             "Meu Curriculo",
@@ -506,6 +653,10 @@ with st.sidebar:
     st.markdown("---")
     if not st.session_state.admin_mode:
         st.markdown("**Dica:** Cole seu curriculo para buscas personalizadas!")
+    else:
+        st.markdown("**Perfil:** Lucas Barbosa Pedro")
+        st.markdown("**Skills:** Python, SQL, Flask, MySQL")
+        st.markdown("**Local:** Sao Paulo - SP")
 
 # ============================================================
 # HEADER
@@ -513,8 +664,8 @@ with st.sidebar:
 if st.session_state.admin_mode:
     st.markdown("""
     <div class="admin-header">
-        <h1>Painel Admin</h1>
-        <p>Modo administrador ativado. Todas as ferramentas disponiveis.</p>
+        <h1>Painel Administrador</h1>
+        <p>Todas as ferramentas disponiveis. Busque vagas com seu perfil personalizado.</p>
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -522,6 +673,7 @@ else:
     <div class="main-header">
         <h1>Buscador de Vagas em TI</h1>
         <p>Encontre vagas de Jovem Aprendiz e Estagio em TI em Sao Paulo</p>
+        <p style="font-size:0.9rem;opacity:0.8;margin-top:1rem;">Gratuito | Personalizado | Inteligente</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -626,6 +778,28 @@ elif page == "Meu Curriculo":
 # PÁGINA: BUSCAR VAGAS
 # ============================================================
 elif page == "Buscar Vagas":
+    if not st.session_state.admin_mode and not st.session_state.searched:
+        st.markdown("""
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-bottom:2rem;">
+            <div class="feature-card">
+                <h3>Busca Inteligente</h3>
+                <p>Busca vagas em multiplas fontes: Bing, Indeed, Vagas.com, Gupy, CIEE e mais.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Personalizado</h3>
+                <p>Cole seu curriculo e receba vagas ranqueadas por compatibilidade com seu perfil.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Selecao de Area</h3>
+                <p>Escolha a area desejada: Backend, Frontend, Dados, Suporte, Infra e mais.</p>
+            </div>
+            <div class="feature-card">
+                <h3>100% Gratuito</h3>
+                <p>Sem cadastro, sem pagamento. Basta colar seu curriculo e buscar.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.title("Buscar Vagas")
 
     skills = st.session_state.resume_skills
@@ -636,7 +810,13 @@ elif page == "Buscar Vagas":
         st.info("Buscando com termos genericos de TI...")
 
     if st.session_state.admin_mode:
-        st.markdown(f"**Modo Admin** | Area: {area} | Skills: {', '.join(skills)}")
+        st.markdown("""
+        <div class="info-box">
+            <strong>Modo Admin Ativo</strong><br>
+            Buscando vagas com seu perfil: Python, SQL, Flask, MySQL, Git, HTML/CSS, Windows, Redes, Linux<br>
+            Area: """ + area + """ | Local: Sao Paulo
+        </div>
+        """, unsafe_allow_html=True)
 
     if st.button("Buscar Vagas Agora", type="primary"):
         with st.spinner("Buscando vagas... (pode levar ate 30s)"):
