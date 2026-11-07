@@ -559,7 +559,7 @@ Pergunta: {prompt}"""
 def chatbot_response(msg):
     msg_lower = msg.lower().strip()
     if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
-        return "Ola! Sou o assistente do Buscador de Vagas TI. Como posso ajudar? Use /ajuda para ver os comandos."
+        return "Ola! Eu sou o bbzinho, seu assistente de vagas! Como posso ajudar? Use /ajuda para ver os comandos."
     if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
         return ("Comandos disponiveis:\n"
                 "- /buscar - Buscar vagas de TI\n"
@@ -615,7 +615,7 @@ def chatbot_response(msg):
                 "- Totalmente gratuito!")
     if any(w in msg_lower for w in ["obrigado", "valeu", "thanks"]):
         return "De nada! Boa sorte na busca por vagas! Se precisar de mais ajuda, use /ajuda."
-    return "Nao entendi. Use /ajuda para ver os comandos disponiveis."
+    return "Nao entendi. Use /ajuda para ver os comandos disponiveis. - bbzinho"
 
 # ============================================================
 # SIDEBAR
@@ -1066,8 +1066,8 @@ elif page == "Agente IA":
 # PÁGINA: CHAT (para todos)
 # ============================================================
 elif page == "Chat":
-    st.title("Chat - Assistente de Vagas")
-    st.markdown("Tire suas duvidas sobre vagas de TI, carreira e o buscador.")
+    st.title("Chat - bbzinho")
+    st.markdown("Ola! Eu sou o bbzinho, seu assistente de vagas. Tire suas duvidas!")
 
     if "public_chat" not in st.session_state:
         st.session_state.public_chat = []
@@ -1075,7 +1075,7 @@ elif page == "Chat":
     def chatbot_response(msg):
         msg_lower = msg.lower().strip()
         if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
-            return "Ola! Sou o assistente do Buscador de Vagas TI. Como posso ajudar? Use /ajuda para ver os comandos."
+            return "Ola! Eu sou o bbzinho, seu assistente de vagas! Como posso ajudar? Use /ajuda para ver os comandos."
         if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
             return ("Comandos disponiveis:\n"
                     "- /buscar - Buscar vagas de TI\n"
@@ -1131,7 +1131,7 @@ elif page == "Chat":
                     "- Totalmente gratuito!")
         if any(w in msg_lower for w in ["obrigado", "valeu", "thanks"]):
             return "De nada! Boa sorte na busca por vagas! Se precisar de mais ajuda, use /ajuda."
-        return "Nao entendi. Use /ajuda para ver os comandos disponiveis."
+        return "Nao entendi. Use /ajuda para ver os comandos disponiveis. - bbzinho"
 
     chat_container = st.container()
     with chat_container:
@@ -1139,7 +1139,7 @@ elif page == "Chat":
             if msg["role"] == "user":
                 st.markdown(f"**Voce:** {msg['content']}")
             else:
-                st.markdown(f"**Assistente:** {msg['content']}")
+                st.markdown(f"**bbzinho:** {msg['content']}")
             st.markdown("---")
 
     col1, col2 = st.columns([4, 1])
