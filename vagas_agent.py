@@ -68,7 +68,7 @@ CONFIG = {
     "retry_delay": 2,
     "schedule_hours": 24,
     "followup_days": 7,
-    "cities": ["Taboão da Serra", "São Paulo", "Osasco", "Embu", "Cotia", "Itapecerica"],
+    "cities": ["São Paulo"],
     "llm_api_key": os.environ.get("LLM_API_KEY", ""),
     "llm_provider": "openai",  # openai, anthropic, gemini
 }
@@ -82,7 +82,7 @@ PROFILE = {
     "email": "lucasbarbosapedro1108@gmail.com",
     "linkedin": "linkedin.com/in/lucasbarbosapedro",
     "github": "github.com/lucass1108",
-    "location": "Taboão da Serra - SP",
+    "location": "São Paulo - SP",
     "education": "Análise e Desenvolvimento de Sistemas (ADS) — UNIFECAF (2º sem)",
     "skills": {
         "strong": ["python", "sql", "flask", "mysql"],
@@ -120,8 +120,8 @@ APPLICATION_STATUSES = {
 # FONTES DE BUSCA
 # ============================================================
 SEARCH_QUERIES = [
-    "jovem aprendiz ti Taboão da Serra",
-    "estágio ti suporte Taboão da Serra",
+    "jovem aprendiz ti São Paulo",
+    "estágio ti suporte São Paulo",
     "estágio desenvolvimento python São Paulo",
     "estágio dados São Paulo",
     "jovem aprendiz suporte técnico São Paulo",
@@ -136,7 +136,7 @@ SEARCH_QUERIES = [
 
 DIRECT_SEARCH_URLS = [
     ("Indeed", "https://br.indeed.com/jobs?q=jovem+aprendiz+ti&l=S%C3%A3o+Paulo%2C+SP"),
-    ("Indeed", "https://br.indeed.com/jobs?q=est%C3%A1gio+ti+suporte&l=Tabo%C3%A3o+da+Serra%2C+SP"),
+    ("Indeed", "https://br.indeed.com/jobs?q=est%C3%A1gio+ti+suporte&l=S%C3%A3o+Paulo%2C+SP"),
     ("Indeed", "https://br.indeed.com/jobs?q=est%C3%A1gio+python&l=S%C3%A3o+Paulo%2C+SP"),
     ("Vagas.com", "https://www.vagas.com.br/vagas-de-jovem-aprendiz-ti"),
     ("Vagas.com", "https://www.vagas.com.br/vagas-de-estagio-ti"),
@@ -168,13 +168,11 @@ def score_job(job: dict) -> int:
     level_hits = sum(1 for kw in PROFILE["level_keywords"] if kw in text)
     score += min(level_hits * 10, 20)
 
-    if "taboão" in text or "taboao" in text:
+    if "são paulo" in text or "sao paulo" in text:
         score += 15
-    elif "são paulo" in text or "sao paulo" in text:
-        score += 10
-    elif "remoto" in text or "híbrido" in text or "hibrido" in text:
+    elif "remoto" in text or "híbrido" in text or "hibrido" in text or "home office" in text:
         score += 12
-    elif any(c.lower() in text for c in CONFIG["cities"]):
+    elif "osasco" in text or "embu" in text or "cotia" in text or "itapecerica" in text or "taboão" in text or "taboao" in text:
         score += 8
 
     if "6h" in text or "30h" in text or "meio período" in text or "part-time" in text or "6 horas" in text:
@@ -297,7 +295,26 @@ def search_jobs() -> list[dict]:
         except Exception as e:
             print(f"  [AVISO] Erro ao acessar {source_name}: {e}")
 
-    return jobs
+    # Filtra por localização: apenas SP e remoto/híbrido
+    # Remove vagas que mencionam explicitamente outras cidades/estados
+    other_locations = ["rio de janeiro", "rj", "belo horizonte", "bh", "curitiba", "porto alegre",
+                       "salvador", "fortaleza", "recife", "brasília", "brasilia", "goiânia",
+                       "goiania", "campinas", "santos", "guarulhos", "manaus", "belém",
+                       "florianópolis", "florianopolis", "natal", "joão pessoa", "maceió",
+                       "teresina", "campo grande", "cuiabá", "vitória", "aracaju"]
+    sp_ok = ["são paulo", "sao paulo", "taboão", "taboao", "osasco", "embu", "cotia",
+             "itapecerica", "remoto", "híbrido", "hibrido", "home office", "home-office",
+             "grande sp", "abc", "zona sul", "zona norte", "zona leste", "zona oeste",
+             "centro", "pinheiros", "vila olimpia", "itaim", "moema", "barra funda",
+             "jabaquara", "santo amaro", "morumbi", "paulista", "consolação", "liberdade"]
+    filtered = []
+    for job in jobs:
+        text = (job.get("title", "") + " " + job.get("description", "")).lower()
+        # Se menciona outra cidade/estado explicitamente, descarta
+        if any(loc in text for loc in other_locations):
+            continue
+        filtered.append(job)
+    return filtered
 
 # ============================================================
 # DEDUPLICAÇÃO
