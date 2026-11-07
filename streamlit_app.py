@@ -6,79 +6,6 @@ import re
 import time
 from datetime import datetime
 
-# ============================================================
-# GEMINI AI (gratuito)
-# ============================================================
-GEMINI_API_KEY = None
-try:
-    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
-except Exception:
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-
-# Rate limiting para Gemini free tier (15 req/min)
-if "gemini_last_call" not in st.session_state:
-    st.session_state.gemini_last_call = 0
-if "gemini_call_count" not in st.session_state:
-    st.session_state.gemini_call_count = 0
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-def gemini_available():
-    """Verifica se pode fazer chamada ao Gemini (rate limit)."""
-    now = time.time()
-    # Reset contador a cada minuto
-    if now - st.session_state.gemini_last_call > 60:
-        st.session_state.gemini_call_count = 0
-    if st.session_state.gemini_call_count >= 14:
-        wait = 60 - (now - st.session_state.gemini_last_call)
-        return False, max(0, int(wait))
-    return True, 0
-
-def call_gemini(prompt, context=""):
-    """Chama a API do Gemini (gratuito)."""
-    if not GEMINI_API_KEY:
-        return "Chave do Gemini nao configurada. Adicione GEMINI_API_KEY nos Secrets do Streamlit."
-
-    available, wait = gemini_available()
-    if not available:
-        return f"Limite de requisições atingido. Aguarde {wait} segundos e tente novamente."
-
-    try:
-        import urllib.request
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-        full_prompt = f"""Voce e um assistente de carreira especializado em vagas de TI para Lucas Barbosa Pedro.
-
-PERFIL DO LUCAS:
-- Nome: Lucas Barbosa Pedro
-- Localizacao: Sao Paulo - SP
-- Formacao: ADS (UNIFECAF, 2 semestre)
-- Skills: Python, SQL, Flask, MySQL, Git, HTML/CSS, Windows, Redes, Linux
-- Experiencia: Backoffice/Atendimento (Sercom/Claro) desde jan/2026
-- Projetos: FinanceTracker (Python+Flask+MySQL), BrutalFit Expo (Python+MySQL)
-- Diferenciais: Medalhista CUCO/USP (ouro), OBMEP, OMASP; ingles intermediario
-- Objetivo: Jovem Aprendiz / Estagio em TI (suporte, dados ou desenvolvimento)
-
-{context}
-
-Responda de forma concisa e util. Use portugues brasileiro.
-
-Pergunta do usuario: {prompt}"""
-
-        data = json.dumps({
-            "contents": [{"parts": [{"text": full_prompt}]}],
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
-        }).encode()
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        resp = urllib.request.urlopen(req, timeout=30)
-        result = json.loads(resp.read())
-        text = result["candidates"][0]["content"]["parts"][0]["text"]
-
-        st.session_state.gemini_last_call = time.time()
-        st.session_state.gemini_call_count += 1
-        return text
-    except Exception as e:
-        return f"Erro ao chamar Gemini: {str(e)}"
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ============================================================
@@ -92,74 +19,169 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS CUSTOMIZADO
+# CSS CUSTOMIZADO (design moderno)
 # ============================================================
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    * { font-family: 'Inter', sans-serif; }
+
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 12px;
+        padding: 2.5rem 2rem;
+        border-radius: 16px;
         color: white;
         margin-bottom: 2rem;
         text-align: center;
+        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
     }
-    .main-header h1 { margin: 0; font-size: 2.2rem; }
-    .main-header p { margin: 0.5rem 0 0 0; opacity: 0.9; }
+    .main-header h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
+    .main-header p { margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.1rem; }
+
     .admin-header {
         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        padding: 2rem;
-        border-radius: 12px;
+        padding: 2.5rem 2rem;
+        border-radius: 16px;
         color: white;
         margin-bottom: 2rem;
         text-align: center;
+        box-shadow: 0 8px 32px rgba(245, 87, 108, 0.3);
     }
-    .admin-header h1 { margin: 0; font-size: 2.2rem; }
-    .admin-header p { margin: 0.5rem 0 0 0; opacity: 0.9; }
+    .admin-header h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
+    .admin-header p { margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.1rem; }
+
     .job-card {
         background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 1.2rem;
-        margin: 0.8rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #e8e8e8;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        transition: all 0.3s ease;
+        border-left: 4px solid #667eea;
+    }
+    .job-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
     }
     .score-badge {
         display: inline-block;
-        padding: 4px 12px;
+        padding: 6px 14px;
         border-radius: 20px;
         color: white;
-        font-weight: bold;
-        font-size: 0.85rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        margin-right: 8px;
     }
-    .score-high { background: #22c55e; }
-    .score-med { background: #eab308; }
-    .score-low { background: #ef4444; }
+    .score-high { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .score-med { background: linear-gradient(135deg, #eab308, #ca8a04); }
+    .score-low { background: linear-gradient(135deg, #ef4444, #dc2626); }
     .skill-tag {
         display: inline-block;
-        background: #e0e7ff;
+        background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
         color: #4338ca;
-        padding: 2px 10px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        margin: 2px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 0.85rem;
+        margin: 3px;
+        font-weight: 500;
     }
     .stat-card {
         background: white;
-        border-radius: 10px;
-        padding: 1.2rem;
+        border-radius: 12px;
+        padding: 1.5rem;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border: 1px solid #f0f0f0;
     }
-    .stat-number { font-size: 2rem; font-weight: bold; color: #667eea; }
-    .stat-label { color: #666; font-size: 0.85rem; }
+    .stat-number { font-size: 2.5rem; font-weight: 700; color: #667eea; }
+    .stat-label { color: #666; font-size: 0.9rem; margin-top: 4px; }
     .admin-badge {
-        background: #f5576c;
+        background: linear-gradient(135deg, #f5576c, #f093fb);
         color: white;
-        padding: 4px 12px;
+        padding: 6px 16px;
         border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: bold;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .section-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #333;
+        margin: 1.5rem 0 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #667eea;
+    }
+    .info-box {
+        background: #f0f4ff;
+        border-left: 4px solid #667eea;
+        padding: 1rem 1.2rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    .success-box {
+        background: #f0fdf4;
+        border-left: 4px solid #22c55e;
+        padding: 1rem 1.2rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    .warning-box {
+        background: #fffbeb;
+        border-left: 4px solid #eab308;
+        padding: 1rem 1.2rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    .sidebar-logo {
+        text-align: center;
+        padding: 1rem 0;
+        margin-bottom: 1rem;
+    }
+    .sidebar-logo h2 {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700;
+        margin: 0;
+    }
+    .feature-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 0.8rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border: 1px solid #f0f0f0;
+    }
+    .feature-card h3 { color: #667eea; margin-top: 0; }
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    div[data-testid="stExpander"] {
+        border: 1px solid #e8e8e8;
+        border-radius: 10px;
+        margin: 0.5rem 0;
+    }
+    .stButton > button {
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -179,9 +201,36 @@ if "admin_mode" not in st.session_state:
     st.session_state.admin_mode = False
 if "selected_area" not in st.session_state:
     st.session_state.selected_area = "Todas as vagas de TI"
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "public_chat" not in st.session_state:
+    st.session_state.public_chat = []
+if "gemini_last_call" not in st.session_state:
+    st.session_state.gemini_last_call = 0
+if "gemini_call_count" not in st.session_state:
+    st.session_state.gemini_call_count = 0
 
 # ============================================================
-# FUNÇÕES DE ANÁLISE DE CURRÍCULO
+# PERFIL ADMIN (Lucas)
+# ============================================================
+ADMIN_PROFILE = {
+    "name": "Lucas Barbosa Pedro",
+    "location": "São Paulo - SP",
+    "skills": ["python", "sql", "html", "css", "flask", "mysql", "git", "github",
+               "windows", "excel", "office", "redes", "linux", "atendimento",
+               "backoffice", "suporte"],
+    "education": "ADS — UNIFECAF (2º semestre)",
+    "experience": "Agente de Relacionamento I (Backoffice) — Sercom/Claro",
+    "projects": ["FinanceTracker (Python, Flask, MySQL)", "BrutalFit Expo (Python, MySQL)"],
+    "achievements": ["Medalha de ouro CUCO/USP", "Medalhista OBMEP", "Medalhista OMASP"],
+    "english": "Intermediário (CNA)",
+}
+
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "Lucas0812")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# ============================================================
+# FUNÇÕES
 # ============================================================
 SKILL_KEYWORDS = [
     "python", "java", "javascript", "typescript", "c#", "c++", "php", "ruby", "go", "rust",
@@ -205,19 +254,35 @@ def extract_skills_from_text(text):
     return list(set(found))
 
 def extract_experience_years(text):
-    patterns = [
-        r'(\d+)\s*anos?\s*(?:de\s*)?experiência',
-        r'(\d+)\s*years?\s*(?:of\s*)?experience',
-    ]
+    patterns = [r'(\d+)\s*anos?\s*(?:de\s*)?experiência', r'(\d+)\s*years?\s*(?:of\s*)?experience']
     for pat in patterns:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             return int(m.group(1))
     return 0
 
-# ============================================================
-# FUNÇÕES DE BUSCA
-# ============================================================
+def score_job_generic(job, skills):
+    text = (job.get("title", "") + " " + job.get("description", "")).lower()
+    score = 0
+    skill_hits = sum(1 for s in skills if s in text)
+    score += min(skill_hits * 8, 40)
+    ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas",
+             "informática", "informatica", "help desk", "analista", "dev", "software"]
+    area_hits = sum(1 for kw in ti_kw if kw in text)
+    score += min(area_hits * 4, 20)
+    level_kw = ["jovem aprendiz", "estágio", "estagiário", "aprendiz", "trainee", "estagiario"]
+    if any(kw in text for kw in level_kw):
+        score += 20
+    if "são paulo" in text or "sao paulo" in text or "sp" in text:
+        score += 10
+    elif "remoto" in text or "híbrido" in text or "hibrido" in text:
+        score += 8
+    other_cities = ["rio de janeiro", "curitiba", "porto alegre", "belo horizonte", "salvador",
+                    "fortaleza", "recife", "brasília", "manaus", "florianópolis"]
+    if any(c in text for c in other_cities):
+        score -= 30
+    return max(0, min(100, score))
+
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote_plus
@@ -295,56 +360,120 @@ def search_jobs(skills, area=""):
                     continue
                 seen.add(key)
                 jobs.append({"title": title, "link": link, "description": snippet, "source": "Bing"})
-            import time
             time.sleep(0.5)
         except Exception:
             pass
     return jobs
 
-def score_job_generic(job, skills):
-    text = (job.get("title", "") + " " + job.get("description", "")).lower()
-    score = 0
-    skill_hits = sum(1 for s in skills if s in text)
-    score += min(skill_hits * 8, 40)
-    ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas",
-             "informática", "informatica", "help desk", "analista", "dev", "software"]
-    area_hits = sum(1 for kw in ti_kw if kw in text)
-    score += min(area_hits * 4, 20)
-    level_kw = ["jovem aprendiz", "estágio", "estagiário", "aprendiz", "trainee", "estagiario"]
-    if any(kw in text for kw in level_kw):
-        score += 20
-    if "são paulo" in text or "sao paulo" in text or "sp" in text:
-        score += 10
-    elif "remoto" in text or "híbrido" in text or "hibrido" in text:
-        score += 8
-    other_cities = ["rio de janeiro", "curitiba", "porto alegre", "belo horizonte", "salvador",
-                    "fortaleza", "recife", "brasília", "manaus", "florianópolis"]
-    if any(c in text for c in other_cities):
-        score -= 30
-    return max(0, min(100, score))
+def gemini_available():
+    now = time.time()
+    if now - st.session_state.gemini_last_call > 60:
+        st.session_state.gemini_call_count = 0
+    if st.session_state.gemini_call_count >= 14:
+        wait = 60 - (now - st.session_state.gemini_last_call)
+        return False, max(0, int(wait))
+    return True, 0
 
-# ============================================================
-# DADOS DO ADMIN (Lucas) — carregados apenas com chave
-# ============================================================
-ADMIN_PROFILE = {
-    "name": "Lucas Barbosa Pedro",
-    "location": "São Paulo - SP",
-    "skills": ["python", "sql", "html", "css", "flask", "mysql", "git", "github",
-               "windows", "excel", "office", "redes", "linux", "atendimento",
-               "backoffice", "suporte"],
-    "education": "ADS — UNIFECAF (2º semestre)",
-    "experience": "Agente de Relacionamento I (Backoffice) — Sercom/Claro",
-    "projects": ["FinanceTracker (Python, Flask, MySQL)", "BrutalFit Expo (Python, MySQL)"],
-    "achievements": ["Medalha de ouro CUCO/USP", "Medalhista OBMEP", "Medalhista OMASP"],
-}
+def call_gemini(prompt, context=""):
+    if not GEMINI_API_KEY:
+        return "Chave do Gemini nao configurada. Adicione GEMINI_API_KEY nos Secrets do Streamlit."
+    available, wait = gemini_available()
+    if not available:
+        return f"Limite de requisicoes atingido. Aguarde {wait} segundos."
+    try:
+        import urllib.request
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        full_prompt = f"""Voce e um assistente de carreira especializado em vagas de TI para Lucas Barbosa Pedro.
 
-# ============================================================
-# VERIFICAÇÃO DE ADMIN
-# ============================================================
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "Lucas0812")
+PERFIL DO LUCAS:
+- Nome: Lucas Barbosa Pedro
+- Localizacao: Sao Paulo - SP
+- Formacao: ADS (UNIFECAF, 2 semestre)
+- Skills: Python, SQL, Flask, MySQL, Git, HTML/CSS, Windows, Redes, Linux
+- Experiencia: Backoffice/Atendimento (Sercom/Claro) desde jan/2026
+- Projetos: FinanceTracker (Python+Flask+MySQL), BrutalFit Expo (Python+MySQL)
+- Diferenciais: Medalhista CUCO/USP (ouro), OBMEP, OMASP; ingles intermediario
+- Objetivo: Jovem Aprendiz / Estagio em TI (suporte, dados ou desenvolvimento)
 
-def check_admin(key):
-    return key == ADMIN_KEY
+{context}
+
+Responda de forma concisa e util. Use portugues brasileiro.
+
+Pergunta: {prompt}"""
+        data = json.dumps({
+            "contents": [{"parts": [{"text": full_prompt}]}],
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
+        }).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req, timeout=30)
+        result = json.loads(resp.read())
+        text = result["candidates"][0]["content"]["parts"][0]["text"]
+        st.session_state.gemini_last_call = time.time()
+        st.session_state.gemini_call_count += 1
+        return text
+    except Exception as e:
+        return f"Erro ao chamar Gemini: {str(e)}"
+
+def chatbot_response(msg):
+    msg_lower = msg.lower().strip()
+    if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
+        return "Ola! Sou o assistente do Buscador de Vagas TI. Como posso ajudar? Use /ajuda para ver os comandos."
+    if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
+        return ("Comandos disponiveis:\n"
+                "- /buscar - Buscar vagas de TI\n"
+                "- /area - Ver areas disponiveis\n"
+                "- /dicas - Dicas para candidatura\n"
+                "- /curriculo - Como preparar curriculo\n"
+                "- /entrevista - Dicas de entrevista\n"
+                "- /sobre - Sobre o buscador")
+    if any(w in msg_lower for w in ["buscar", "vagas", "procurar"]):
+        return "Va para a aba 'Buscar Vagas' e clique em 'Buscar Vagas Agora'. Para melhores resultados, analise seu curriculo primeiro em 'Meu Curriculo'."
+    if any(w in msg_lower for w in ["area", "areas"]):
+        return ("Areas disponiveis:\n"
+                "- Todas as vagas de TI\n"
+                "- Jovem Aprendiz TI\n"
+                "- Estagio Suporte Tecnico\n"
+                "- Estagio Desenvolvimento (Backend/Frontend/Full Stack)\n"
+                "- Estagio Dados / BI\n"
+                "- Estagio Infraestrutura / Redes\n"
+                "- Estagio Help Desk\n"
+                "- Estagio Analista de Sistemas\n"
+                "- Trainee TI\n\n"
+                "Selecione a area na aba 'Meu Curriculo'.")
+    if any(w in msg_lower for w in ["dicas", "dica", "candidatura"]):
+        return ("Dicas para candidatura:\n"
+                "1. Mantenha seu curriculo atualizado\n"
+                "2. Destaque projetos no GitHub\n"
+                "3. Personalize o curriculo para cada vaga\n"
+                "4. Candidate-se cedo (primeiras 24h)\n"
+                "5. Acompanhe o status das candidaturas\n"
+                "6. Faca follow-up apos 7 dias")
+    if any(w in msg_lower for w in ["curriculo", "resume", "cv"]):
+        return ("Para preparar um bom curriculo:\n"
+                "1. Cole seu curriculo na aba 'Meu Curriculo'\n"
+                "2. O sistema analisa suas skills automaticamente\n"
+                "3. As vagas sao ranqueadas por compatibilidade\n"
+                "4. Destaque projetos praticos (GitHub)\n"
+                "5. Mencione conquistas e certificacoes")
+    if any(w in msg_lower for w in ["entrevista", "interview"]):
+        return ("Dicas para entrevista:\n"
+                "1. Pesquise sobre a empresa\n"
+                "2. Prepare exemplos (tecnica STAR)\n"
+                "3. Tenha perguntas para o entrevistador\n"
+                "4. Chegue 10 min antes\n"
+                "5. Vista-se adequadamente\n"
+                "6. Teste camera/microfone se online")
+    if any(w in msg_lower for w in ["sobre", "o que e", "funciona"]):
+        return ("O Buscador de Vagas TI encontra vagas de Jovem Aprendiz e Estagio em TI em Sao Paulo.\n"
+                "Funcionalidades:\n"
+                "- Busca em multiplas fontes (Bing, Indeed, Vagas.com, etc.)\n"
+                "- Ranqueamento por compatibilidade com seu curriculo\n"
+                "- Selecao de area/vaga desejada\n"
+                "- Upload e analise de curriculo\n"
+                "- Totalmente gratuito!")
+    if any(w in msg_lower for w in ["obrigado", "valeu", "thanks"]):
+        return "De nada! Boa sorte na busca por vagas! Se precisar de mais ajuda, use /ajuda."
+    return "Nao entendi. Use /ajuda para ver os comandos disponiveis."
 
 # ============================================================
 # SIDEBAR
@@ -354,7 +483,7 @@ with st.sidebar:
     st.markdown("---")
 
     if st.session_state.admin_mode:
-        st.markdown('<span class="admin-badge">MODO ADMIN</span>', unsafe_allow_html=True)
+        st.markdown('<span style="background:linear-gradient(135deg,#f5576c,#f093fb);color:white;padding:6px 16px;border-radius:20px;font-size:0.85rem;font-weight:600;">MODO ADMIN</span>', unsafe_allow_html=True)
         st.markdown("---")
         page = st.radio("Menu", [
             "Buscar Vagas",
@@ -384,8 +513,8 @@ with st.sidebar:
 if st.session_state.admin_mode:
     st.markdown("""
     <div class="admin-header">
-        <h1>Painel Admin — Lucas</h1>
-        <p>Modo administrador ativado. Todas as ferramentas disponíveis.</p>
+        <h1>Painel Admin</h1>
+        <p>Modo administrador ativado. Todas as ferramentas disponiveis.</p>
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -397,210 +526,17 @@ else:
     """, unsafe_allow_html=True)
 
 # ============================================================
-# PÁGINA: AGENTE IA (ADMIN)
-# ============================================================
-if page == "Agente IA":
-    if not st.session_state.admin_mode:
-        st.error("Acesso restrito. Va para 'Acesso Admin' e insira sua chave.")
-    else:
-        st.title("Agente IA - Assistente de Carreira")
-        st.markdown("Converse com o agente de IA para obter ajuda com vagas, candidaturas, entrevistas e carreira.")
-
-        # Contexto atual
-        context_parts = []
-        try:
-            from vagas_agent import load_applications, load_history, get_application_stats, get_followup_reminders
-            apps = load_applications()
-            history = load_history()
-            reminders = get_followup_reminders()
-            stats = get_application_stats()
-
-            context_parts.append(f"CANDIDATURAS: {len(apps)} total, {stats['taxa_resposta']}% taxa de resposta")
-            if apps:
-                for app in apps[:5]:
-                    context_parts.append(f"  - {app['vaga']} ({app.get('empresa','N/A')}) - Status: {app['status']}")
-            if reminders:
-                context_parts.append(f"FOLLOW-UPS PENDENTES: {len(reminders)}")
-                for app, days in reminders:
-                    context_parts.append(f"  - {app['vaga']} ({days} dias sem resposta)")
-            context_parts.append(f"VAGAS VISTAS: {len(history.get('seen', []))}")
-        except Exception:
-            pass
-
-        if st.session_state.jobs:
-            jobs = st.session_state.jobs
-            context_parts.append(f"VAGAS ENCONTRADAS NA ULTIMA BUSCA: {len(jobs)}")
-            top = sorted(jobs, key=lambda j: __import__('vagas_agent').score_job_generic(j, st.session_state.resume_skills), reverse=True)[:5]
-            for job in top:
-                context_parts.append(f"  - {job['title'][:50]} (score: {__import__('vagas_agent').score_job_generic(job, st.session_state.resume_skills)})")
-
-        if st.session_state.resume_skills:
-            context_parts.append(f"SKILLS DO CURRICULO: {', '.join(st.session_state.resume_skills)}")
-
-        context = "\n".join(context_parts)
-
-        # Botoes de acao rapida
-        st.subheader("Acoes rapidas")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            if st.button("Buscar vagas"):
-                st.session_state.chat_history.append({"role": "user", "content": "Busque vagas de TI em Sao Paulo para mim"})
-                st.rerun()
-        with col2:
-            if st.button("Ver candidaturas"):
-                st.session_state.chat_history.append({"role": "user", "content": "Liste minhas candidaturas e estatisticas"})
-                st.rerun()
-        with col3:
-            if st.button("Follow-ups"):
-                st.session_state.chat_history.append({"role": "user", "content": "Quais candidaturas precisam de follow-up?"})
-                st.rerun()
-        with col4:
-            if st.button("Limpar chat"):
-                st.session_state.chat_history = []
-                st.rerun()
-
-        # Exibir historico do chat
-        st.subheader("Chat")
-        chat_container = st.container()
-        with chat_container:
-            for msg in st.session_state.chat_history:
-                if msg["role"] == "user":
-                    st.markdown(f"**Voce:** {msg['content']}")
-                else:
-                    st.markdown(f"**Agente:** {msg['content']}")
-                st.markdown("---")
-
-        # Input do usuario
-        user_input = st.text_input("Digite sua pergunta:", key="chat_input", placeholder="Ex: Quais vagas sao mais compatíveis com meu perfil?")
-        if st.button("Enviar") and user_input.strip():
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-
-            with st.spinner("Pensando..."):
-                response = call_gemini(user_input, context)
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
-            st.rerun()
-
-        # Status do Gemini
-        available, wait = gemini_available()
-        if not available:
-            st.warning(f"Limite de requisicoes atingido. Aguarde {wait}s.")
-        else:
-            st.caption(f"Gemini gratuito - {14 - st.session_state.gemini_call_count} requisicoes restantes neste minuto")
-
-# ============================================================
-# PÁGINA: CHAT (para todos)
-# ============================================================
-elif page == "Chat":
-    st.title("Chat - Assistente de Vagas")
-    st.markdown("Tire suas duvidas sobre vagas de TI, carreira e o buscador.")
-
-    # Inicializa historico do chat
-    if "public_chat" not in st.session_state:
-        st.session_state.public_chat = []
-
-    # Respostas pre-definidas (chatbot simples)
-    def chatbot_response(msg):
-        msg_lower = msg.lower().strip()
-        if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
-            return "Ola! Sou o assistente do Buscador de Vagas TI. Como posso ajudar? Use /ajuda para ver os comandos."
-        if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
-            return ("Comandos disponiveis:\n"
-                    "- /buscar - Buscar vagas de TI\n"
-                    "- /area - Ver areas disponiveis\n"
-                    "- /dicas - Dicas para candidatura\n"
-                    "- /curriculo - Como preparar curriculo\n"
-                    "- /entrevista - Dicas de entrevista\n"
-                    "- /sobre - Sobre o buscador")
-        if any(w in msg_lower for w in ["buscar", "vagas", "procurar"]):
-            return "Va para a aba 'Buscar Vagas' e clique em 'Buscar Vagas Agora'. Para melhores resultados, analise seu curriculo primeiro em 'Meu Curriculo'."
-        if any(w in msg_lower for w in ["area", "areas"]):
-            return ("Areas disponiveis:\n"
-                    "- Todas as vagas de TI\n"
-                    "- Jovem Aprendiz TI\n"
-                    "- Estagio Suporte Tecnico\n"
-                    "- Estagio Desenvolvimento (Backend/Frontend/Full Stack)\n"
-                    "- Estagio Dados / BI\n"
-                    "- Estagio Infraestrutura / Redes\n"
-                    "- Estagio Help Desk\n"
-                    "- Estagio Analista de Sistemas\n"
-                    "- Trainee TI\n\n"
-                    "Selecione a area na aba 'Meu Curriculo'.")
-        if any(w in msg_lower for w in ["dicas", "dica", "candidatura"]):
-            return ("Dicas para candidatura:\n"
-                    "1. Mantenha seu curriculo atualizado\n"
-                    "2. Destaque projetos no GitHub\n"
-                    "3. Personalize o curriculo para cada vaga\n"
-                    "4. Candidate-se cedo (primeiras 24h)\n"
-                    "5. Acompanhe o status das candidaturas\n"
-                    "6. Faca follow-up apos 7 dias")
-        if any(w in msg_lower for w in ["curriculo", "resume", "cv"]):
-            return ("Para preparar um bom curriculo:\n"
-                    "1. Cole seu curriculo na aba 'Meu Curriculo'\n"
-                    "2. O sistema analisa suas skills automaticamente\n"
-                    "3. As vagas sao ranqueadas por compatibilidade\n"
-                    "4. Destaque projetos praticos (GitHub)\n"
-                    "5. Mencione conquistas e certificacoes")
-        if any(w in msg_lower for w in ["entrevista", "interview"]):
-            return ("Dicas para entrevista:\n"
-                    "1. Pesquise sobre a empresa\n"
-                    "2. Prepare exemplos (tecnica STAR)\n"
-                    "3. Tenha perguntas para o entrevistador\n"
-                    "4. Chegue 10 min antes\n"
-                    "5. Vista-se adequadamente\n"
-                    "6. Teste camera/microfone se online")
-        if any(w in msg_lower for w in ["sobre", "o que e", "funciona"]):
-            return ("O Buscador de Vagas TI encontra vagas de Jovem Aprendiz e Estagio em TI em Sao Paulo.\n"
-                    "Funcionalidades:\n"
-                    "- Busca em multiplas fontes (Bing, Indeed, Vagas.com, etc.)\n"
-                    "- Ranqueamento por compatibilidade com seu curriculo\n"
-                    "- Selecao de area/vaga desejada\n"
-                    "- Upload e analise de curriculo\n"
-                    "- Totalmente gratuito!")
-        if any(w in msg_lower for w in ["obrigado", "valeu", "thanks"]):
-            return "De nada! Boa sorte na busca por vagas! Se precisar de mais ajuda, use /ajuda."
-        return "Nao entendi. Use /ajuda para ver os comandos disponiveis."
-
-    # Exibir historico
-    chat_container = st.container()
-    with chat_container:
-        for msg in st.session_state.public_chat:
-            if msg["role"] == "user":
-                st.markdown(f"**Voce:** {msg['content']}")
-            else:
-                st.markdown(f"**Assistente:** {msg['content']}")
-            st.markdown("---")
-
-    # Input
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        user_input = st.text_input("Digite sua mensagem:", key="public_chat_input", placeholder="Ex: /ajuda")
-    with col2:
-        send = st.button("Enviar")
-
-    if send and user_input.strip():
-        st.session_state.public_chat.append({"role": "user", "content": user_input})
-        response = chatbot_response(user_input)
-        st.session_state.public_chat.append({"role": "assistant", "content": response})
-        st.rerun()
-
-    if st.button("Limpar chat"):
-        st.session_state.public_chat = []
-        st.rerun()
-
-# ============================================================
 # PÁGINA: ACESSO ADMIN
 # ============================================================
 if page == "Acesso Admin":
     st.title("Acesso Administrador")
-
     if st.session_state.admin_mode:
         st.success("Modo administrador ativado!")
-        st.markdown(f"**Bem-vindo, {ADMIN_PROFILE['name']}!**")
-        st.markdown(f"- Localização: {ADMIN_PROFILE['location']}")
-        st.markdown(f"- Formação: {ADMIN_PROFILE['education']}")
-        st.markdown(f"- Experiência: {ADMIN_PROFILE['experience']}")
-        st.markdown(f"- Skills: {', '.join(ADMIN_PROFILE['skills'][:8])}")
-        st.markdown(f"- Projetos: {', '.join(ADMIN_PROFILE['projects'])}")
+        st.markdown(f"**Bem-vindo!**")
+        st.markdown(f"- Localizacao: Sao Paulo - SP")
+        st.markdown(f"- Formacao: ADS - UNIFECAF (2 semestre)")
+        st.markdown(f"- Skills: Python, SQL, Flask, MySQL, Git, HTML/CSS")
+        st.markdown(f"- Projetos: FinanceTracker, BrutalFit Expo")
         if st.button("Sair do modo admin"):
             st.session_state.admin_mode = False
             st.rerun()
@@ -608,19 +544,23 @@ if page == "Acesso Admin":
         st.markdown("Insira sua chave de acesso para desbloquear o painel administrador.")
         key_input = st.text_input("Chave de acesso:", type="password", placeholder="Digite a chave...")
         if st.button("Entrar"):
-            if check_admin(key_input):
+            if key_input == os.environ.get("ADMIN_KEY", "Lucas0812"):
                 st.session_state.admin_mode = True
+                # Carrega perfil do admin como skills
+                st.session_state.resume_skills = ADMIN_PROFILE["skills"]
+                st.session_state.resume_text = f"Perfil: {ADMIN_PROFILE['name']} - {ADMIN_PROFILE['education']} - Skills: {', '.join(ADMIN_PROFILE['skills'])}"
+                st.session_state.selected_area = "Todas as vagas de TI"
                 st.success("Acesso concedido! Modo administrador ativado.")
                 st.rerun()
             else:
-                st.error("Chave inválida. Acesso negado.")
+                st.error("Chave invalida. Acesso negado.")
 
 # ============================================================
 # PÁGINA: MEU CURRÍCULO
 # ============================================================
 elif page == "Meu Curriculo":
     st.title("Meu Curriculo")
-    st.markdown("Cole seu curriculo abaixo para que o buscador encontre vagas compatíveis com seu perfil.")
+    st.markdown("Cole seu curriculo abaixo para que o buscador encontre vagas compativeis com seu perfil.")
 
     st.subheader("Qual area/vaga voce busca?")
     area_options = [
@@ -643,7 +583,6 @@ elif page == "Meu Curriculo":
         selected_area = custom_area if custom_area else "Estagio TI"
 
     st.session_state.selected_area = selected_area
-    st.info(f"Area selecionada: {selected_area}")
 
     col1, col2 = st.columns([2, 1])
 
@@ -652,7 +591,7 @@ elif page == "Meu Curriculo":
             "Cole seu curriculo aqui:",
             value=st.session_state.resume_text,
             height=300,
-            placeholder="Cole o texto do seu curriculo...\n\nExemplo:\nNome: João Silva\nObjetivo: Estágio em TI\nHabilidades: Python, SQL, Excel...\nExperiência: ...\nFormação: ...",
+            placeholder="Cole o texto do seu curriculo...",
         )
 
         uploaded_file = st.file_uploader("Ou envie um arquivo (.txt)", type=["txt"])
@@ -666,11 +605,9 @@ elif page == "Meu Curriculo":
                 st.session_state.resume_skills = skills
                 exp_years = extract_experience_years(resume_input)
                 st.success(f"Curriculo analisado! {len(skills)} skills encontradas.")
-
                 st.subheader("Skills detectadas:")
                 for skill in skills:
                     st.markdown(f'<span class="skill-tag">{skill}</span>', unsafe_allow_html=True)
-
                 if exp_years > 0:
                     st.info(f"Experiencia estimada: {exp_years} anos")
             else:
@@ -694,11 +631,12 @@ elif page == "Buscar Vagas":
     skills = st.session_state.resume_skills
     area = st.session_state.get("selected_area", "Todas as vagas de TI")
 
-    if not skills:
-        st.warning("Nenhum curriculo analisado. Vá para 'Meu Curriculo' para melhores resultados.")
+    if not skills and not st.session_state.admin_mode:
+        st.warning("Nenhum curriculo analisado. Va para 'Meu Curriculo' para melhores resultados.")
         st.info("Buscando com termos genericos de TI...")
 
-    st.info(f"Area: {area} | Skills: {', '.join(skills) if skills else 'nenhuma'}")
+    if st.session_state.admin_mode:
+        st.markdown(f"**Modo Admin** | Area: {area} | Skills: {', '.join(skills)}")
 
     if st.button("Buscar Vagas Agora", type="primary"):
         with st.spinner("Buscando vagas... (pode levar ate 30s)"):
@@ -737,7 +675,7 @@ elif page == "Buscar Vagas":
                     st.markdown("**Skills que combinam:** " + ", ".join(matched))
 
 # ============================================================
-# PÁGINAS ADMIN (apenas com chave)
+# PÁGINAS ADMIN
 # ============================================================
 elif page == "Candidaturas":
     if not st.session_state.admin_mode:
@@ -745,7 +683,6 @@ elif page == "Candidaturas":
     else:
         st.title("Minhas Candidaturas")
         try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from vagas_agent import load_applications, get_application_stats, APPLICATION_STATUSES, track_application, get_followup_reminders
             apps = load_applications()
             if not apps:
@@ -862,6 +799,184 @@ elif page == "Analytics":
                 st.bar_chart(score_dist)
         except Exception as e:
             st.error(f"Erro: {e}")
+
+elif page == "Agente IA":
+    if not st.session_state.admin_mode:
+        st.error("Acesso restrito. Va para 'Acesso Admin' e insira sua chave.")
+    else:
+        st.title("Agente IA - Assistente de Carreira")
+        st.markdown("Converse com o agente de IA para obter ajuda com vagas, candidaturas, entrevistas e carreira.")
+
+        context_parts = []
+        try:
+            from vagas_agent import load_applications, load_history, get_application_stats, get_followup_reminders
+            apps = load_applications()
+            history = load_history()
+            reminders = get_followup_reminders()
+            stats = get_application_stats()
+
+            context_parts.append(f"CANDIDATURAS: {len(apps)} total, {stats['taxa_resposta']}% taxa de resposta")
+            if apps:
+                for app in apps[:5]:
+                    context_parts.append(f"  - {app['vaga']} ({app.get('empresa','N/A')}) - Status: {app['status']}")
+            if reminders:
+                context_parts.append(f"FOLLOW-UPS PENDENTES: {len(reminders)}")
+                for app, days in reminders:
+                    context_parts.append(f"  - {app['vaga']} ({days} dias sem resposta)")
+            context_parts.append(f"VAGAS VISTAS: {len(history.get('seen', []))}")
+        except Exception:
+            pass
+
+        if st.session_state.jobs:
+            jobs = st.session_state.jobs
+            context_parts.append(f"VAGAS ENCONTRADAS NA ULTIMA BUSCA: {len(jobs)}")
+            top = sorted(jobs, key=lambda j: score_job_generic(j, st.session_state.resume_skills), reverse=True)[:5]
+            for job in top:
+                context_parts.append(f"  - {job['title'][:50]} (score: {score_job_generic(job, st.session_state.resume_skills)})")
+
+        if st.session_state.resume_skills:
+            context_parts.append(f"SKILLS DO CURRICULO: {', '.join(st.session_state.resume_skills)}")
+
+        context = "\n".join(context_parts)
+
+        st.subheader("Acoes rapidas")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            if st.button("Buscar vagas"):
+                st.session_state.chat_history.append({"role": "user", "content": "Busque vagas de TI em Sao Paulo para mim"})
+                st.rerun()
+        with col2:
+            if st.button("Ver candidaturas"):
+                st.session_state.chat_history.append({"role": "user", "content": "Liste minhas candidaturas e estatisticas"})
+                st.rerun()
+        with col3:
+            if st.button("Follow-ups"):
+                st.session_state.chat_history.append({"role": "user", "content": "Quais candidaturas precisam de follow-up?"})
+                st.rerun()
+        with col4:
+            if st.button("Limpar chat"):
+                st.session_state.chat_history = []
+                st.rerun()
+
+        st.subheader("Chat")
+        chat_container = st.container()
+        with chat_container:
+            for msg in st.session_state.chat_history:
+                if msg["role"] == "user":
+                    st.markdown(f"**Voce:** {msg['content']}")
+                else:
+                    st.markdown(f"**Agente:** {msg['content']}")
+                st.markdown("---")
+
+        user_input = st.text_input("Digite sua pergunta:", key="chat_input", placeholder="Ex: Quais vagas sao mais compativeis com meu perfil?")
+        if st.button("Enviar") and user_input.strip():
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            with st.spinner("Pensando..."):
+                response = call_gemini(user_input, context)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            st.rerun()
+
+        available, wait = gemini_available()
+        if not available:
+            st.warning(f"Limite de requisicoes atingido. Aguarde {wait}s.")
+        else:
+            st.caption(f"Gemini gratuito - {14 - st.session_state.gemini_call_count} requisicoes restantes neste minuto")
+
+# ============================================================
+# PÁGINA: CHAT (para todos)
+# ============================================================
+elif page == "Chat":
+    st.title("Chat - Assistente de Vagas")
+    st.markdown("Tire suas duvidas sobre vagas de TI, carreira e o buscador.")
+
+    if "public_chat" not in st.session_state:
+        st.session_state.public_chat = []
+
+    def chatbot_response(msg):
+        msg_lower = msg.lower().strip()
+        if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
+            return "Ola! Sou o assistente do Buscador de Vagas TI. Como posso ajudar? Use /ajuda para ver os comandos."
+        if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
+            return ("Comandos disponiveis:\n"
+                    "- /buscar - Buscar vagas de TI\n"
+                    "- /area - Ver areas disponiveis\n"
+                    "- /dicas - Dicas para candidatura\n"
+                    "- /curriculo - Como preparar curriculo\n"
+                    "- /entrevista - Dicas de entrevista\n"
+                    "- /sobre - Sobre o buscador")
+        if any(w in msg_lower for w in ["buscar", "vagas", "procurar"]):
+            return "Va para a aba 'Buscar Vagas' e clique em 'Buscar Vagas Agora'. Para melhores resultados, analise seu curriculo primeiro em 'Meu Curriculo'."
+        if any(w in msg_lower for w in ["area", "areas"]):
+            return ("Areas disponiveis:\n"
+                    "- Todas as vagas de TI\n"
+                    "- Jovem Aprendiz TI\n"
+                    "- Estagio Suporte Tecnico\n"
+                    "- Estagio Desenvolvimento (Backend/Frontend/Full Stack)\n"
+                    "- Estagio Dados / BI\n"
+                    "- Estagio Infraestrutura / Redes\n"
+                    "- Estagio Help Desk\n"
+                    "- Estagio Analista de Sistemas\n"
+                    "- Trainee TI\n\n"
+                    "Selecione a area na aba 'Meu Curriculo'.")
+        if any(w in msg_lower for w in ["dicas", "dica", "candidatura"]):
+            return ("Dicas para candidatura:\n"
+                    "1. Mantenha seu curriculo atualizado\n"
+                    "2. Destaque projetos no GitHub\n"
+                    "3. Personalize o curriculo para cada vaga\n"
+                    "4. Candidate-se cedo (primeiras 24h)\n"
+                    "5. Acompanhe o status das candidaturas\n"
+                    "6. Faca follow-up apos 7 dias")
+        if any(w in msg_lower for w in ["curriculo", "resume", "cv"]):
+            return ("Para preparar um bom curriculo:\n"
+                    "1. Cole seu curriculo na aba 'Meu Curriculo'\n"
+                    "2. O sistema analisa suas skills automaticamente\n"
+                    "3. As vagas sao ranqueadas por compatibilidade\n"
+                    "4. Destaque projetos praticos (GitHub)\n"
+                    "5. Mencione conquistas e certificacoes")
+        if any(w in msg_lower for w in ["entrevista", "interview"]):
+            return ("Dicas para entrevista:\n"
+                    "1. Pesquise sobre a empresa\n"
+                    "2. Prepare exemplos (tecnica STAR)\n"
+                    "3. Tenha perguntas para o entrevistador\n"
+                    "4. Chegue 10 min antes\n"
+                    "5. Vista-se adequadamente\n"
+                    "6. Teste camera/microfone se online")
+        if any(w in msg_lower for w in ["sobre", "o que e", "funciona"]):
+            return ("O Buscador de Vagas TI encontra vagas de Jovem Aprendiz e Estagio em TI em Sao Paulo.\n"
+                    "Funcionalidades:\n"
+                    "- Busca em multiplas fontes (Bing, Indeed, Vagas.com, etc.)\n"
+                    "- Ranqueamento por compatibilidade com seu curriculo\n"
+                    "- Selecao de area/vaga desejada\n"
+                    "- Upload e analise de curriculo\n"
+                    "- Totalmente gratuito!")
+        if any(w in msg_lower for w in ["obrigado", "valeu", "thanks"]):
+            return "De nada! Boa sorte na busca por vagas! Se precisar de mais ajuda, use /ajuda."
+        return "Nao entendi. Use /ajuda para ver os comandos disponiveis."
+
+    chat_container = st.container()
+    with chat_container:
+        for msg in st.session_state.public_chat:
+            if msg["role"] == "user":
+                st.markdown(f"**Voce:** {msg['content']}")
+            else:
+                st.markdown(f"**Assistente:** {msg['content']}")
+            st.markdown("---")
+
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        user_input = st.text_input("Digite sua mensagem:", key="public_chat_input", placeholder="Ex: /ajuda")
+    with col2:
+        send = st.button("Enviar")
+
+    if send and user_input.strip():
+        st.session_state.public_chat.append({"role": "user", "content": user_input})
+        response = chatbot_response(user_input)
+        st.session_state.public_chat.append({"role": "assistant", "content": response})
+        st.rerun()
+
+    if st.button("Limpar chat"):
+        st.session_state.public_chat = []
+        st.rerun()
 
 # ============================================================
 # RODAPÉ
