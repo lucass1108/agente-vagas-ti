@@ -1075,7 +1075,7 @@ elif page == "Chat":
     def chatbot_response(msg):
         msg_lower = msg.lower().strip()
         # Segredo do bbzinho
-        secret_names = ["ana luiza", "ana luiza ferreira", "ana luiza ferreira pires", "ana", "luiza"]
+        secret_names = ["ana luiza", "ana luiza ferreira", "ana luiza ferreira pires"]
         if any(name in msg_lower for name in secret_names):
             return ("Oi lu... 💕\n\n"
                     "Sou o bbzinho, o assistente pessoal do Lucas.\n"
@@ -1087,6 +1087,29 @@ elif page == "Chat":
                     "E eu, bbzinho, tambem acho voce incrivel! ✨")
         if msg_lower in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oiii", "oii", "oiiii"]:
             return "oiii eu sou o bbzinhoooooooooo, qual seu nome?"
+        # Se a pessoa disse "ana" ou "luiza" sozinho
+        if msg_lower in ["ana", "luiza"]:
+            return ("Oi lu... 💕\n\n"
+                    "Sou o bbzinho, o assistente pessoal do Lucas.\n"
+                    "Ele me pediu para te dizer que gosta muitoooooode voce\n"
+                    "e esta com muita saudade. 💕\n\n"
+                    "Enfim... ele me falou isso aqui. 😊\n"
+                    "E eu, bbzinho, tambem acho voce incrivel! ✨")
+        # Se a pessoa respondeu com um nome (nao e comando conhecido)
+        known_commands = ["ajuda", "help", "comandos", "buscar", "vagas", "procurar", "area", "areas",
+                          "dicas", "dica", "candidatura", "curriculo", "resume", "cv",
+                          "entrevista", "interview", "sobre", "o que e", "funciona",
+                          "obrigado", "valeu", "thanks"]
+        is_command = any(w in msg_lower for w in known_commands) or msg_lower.startswith("/")
+        if not is_command and len(msg_lower) > 0 and len(msg_lower) < 50:
+            name = msg.strip().title()
+            return (f"Oi {name}! 👋\n\n"
+                    f"Sou o bbzinho, seu assistente de vagas! 😊\n"
+                    f"Posso te ajudar com:\n"
+                    f"- Buscar vagas de TI em Sao Paulo\n"
+                    f"- Dicas de candidatura e entrevista\n"
+                    f"- Preparar curriculo\n\n"
+                    f"Use /ajuda para ver todos os comandos!")
         if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
             return "Ola! Eu sou o bbzinho, seu assistente de vagas! Como posso ajudar? Use /ajuda para ver os comandos."
         if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
