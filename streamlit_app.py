@@ -220,6 +220,7 @@ def search_bing(query):
 
 def search_jobs(skills, area=""):
     area_queries = {
+        "Todas as vagas de TI": ["jovem aprendiz ti São Paulo", "estágio ti São Paulo", "estágio ti suporte São Paulo", "estágio desenvolvimento São Paulo", "estágio dados São Paulo", "estágio help desk São Paulo", "trainee ti São Paulo"],
         "Jovem Aprendiz TI": ["jovem aprendiz ti São Paulo", "jovem aprendiz tecnologia São Paulo", "jovem aprendiz informatica São Paulo"],
         "Estagio Suporte Tecnico": ["estágio suporte técnico São Paulo", "estágio suporte ti São Paulo", "estágio help desk São Paulo"],
         "Estagio Desenvolvimento (Backend)": ["estágio desenvolvimento backend São Paulo", "estágio desenvolvedor python São Paulo", "estágio back-end São Paulo"],
@@ -319,6 +320,7 @@ if page == "Meu Curriculo":
     with col1:
         st.subheader("Qual area/vaga voce busca?")
         area_options = [
+            "Todas as vagas de TI",
             "Jovem Aprendiz TI",
             "Estagio Suporte Tecnico",
             "Estagio Desenvolvimento (Backend)",
