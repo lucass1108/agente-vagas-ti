@@ -399,7 +399,7 @@ else:
 # ============================================================
 # PÁGINA: AGENTE IA (ADMIN)
 # ============================================================
-elif page == "Agente IA":
+if page == "Agente IA":
     if not st.session_state.admin_mode:
         st.error("Acesso restrito. Va para 'Acesso Admin' e insira sua chave.")
     else:
