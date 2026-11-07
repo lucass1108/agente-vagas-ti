@@ -370,6 +370,7 @@ with st.sidebar:
         page = st.radio("Menu", [
             "Buscar Vagas",
             "Meu Curriculo",
+            "Chat",
             "Acesso Admin",
         ], label_visibility="collapsed")
 
@@ -485,6 +486,106 @@ elif page == "Agente IA":
             st.warning(f"Limite de requisicoes atingido. Aguarde {wait}s.")
         else:
             st.caption(f"Gemini gratuito - {14 - st.session_state.gemini_call_count} requisicoes restantes neste minuto")
+
+# ============================================================
+# PÁGINA: CHAT (para todos)
+# ============================================================
+elif page == "Chat":
+    st.title("Chat - Assistente de Vagas")
+    st.markdown("Tire suas duvidas sobre vagas de TI, carreira e o buscador.")
+
+    # Inicializa historico do chat
+    if "public_chat" not in st.session_state:
+        st.session_state.public_chat = []
+
+    # Respostas pre-definidas (chatbot simples)
+    def chatbot_response(msg):
+        msg_lower = msg.lower().strip()
+        if any(w in msg_lower for w in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite"]):
+            return "Ola! Sou o assistente do Buscador de Vagas TI. Como posso ajudar? Use /ajuda para ver os comandos."
+        if any(w in msg_lower for w in ["ajuda", "help", "comandos"]):
+            return ("Comandos disponiveis:\n"
+                    "- /buscar - Buscar vagas de TI\n"
+                    "- /area - Ver areas disponiveis\n"
+                    "- /dicas - Dicas para candidatura\n"
+                    "- /curriculo - Como preparar curriculo\n"
+                    "- /entrevista - Dicas de entrevista\n"
+                    "- /sobre - Sobre o buscador")
+        if any(w in msg_lower for w in ["buscar", "vagas", "procurar"]):
+            return "Va para a aba 'Buscar Vagas' e clique em 'Buscar Vagas Agora'. Para melhores resultados, analise seu curriculo primeiro em 'Meu Curriculo'."
+        if any(w in msg_lower for w in ["area", "areas"]):
+            return ("Areas disponiveis:\n"
+                    "- Todas as vagas de TI\n"
+                    "- Jovem Aprendiz TI\n"
+                    "- Estagio Suporte Tecnico\n"
+                    "- Estagio Desenvolvimento (Backend/Frontend/Full Stack)\n"
+                    "- Estagio Dados / BI\n"
+                    "- Estagio Infraestrutura / Redes\n"
+                    "- Estagio Help Desk\n"
+                    "- Estagio Analista de Sistemas\n"
+                    "- Trainee TI\n\n"
+                    "Selecione a area na aba 'Meu Curriculo'.")
+        if any(w in msg_lower for w in ["dicas", "dica", "candidatura"]):
+            return ("Dicas para candidatura:\n"
+                    "1. Mantenha seu curriculo atualizado\n"
+                    "2. Destaque projetos no GitHub\n"
+                    "3. Personalize o curriculo para cada vaga\n"
+                    "4. Candidate-se cedo (primeiras 24h)\n"
+                    "5. Acompanhe o status das candidaturas\n"
+                    "6. Faca follow-up apos 7 dias")
+        if any(w in msg_lower for w in ["curriculo", "resume", "cv"]):
+            return ("Para preparar um bom curriculo:\n"
+                    "1. Cole seu curriculo na aba 'Meu Curriculo'\n"
+                    "2. O sistema analisa suas skills automaticamente\n"
+                    "3. As vagas sao ranqueadas por compatibilidade\n"
+                    "4. Destaque projetos praticos (GitHub)\n"
+                    "5. Mencione conquistas e certificacoes")
+        if any(w in msg_lower for w in ["entrevista", "interview"]):
+            return ("Dicas para entrevista:\n"
+                    "1. Pesquise sobre a empresa\n"
+                    "2. Prepare exemplos (tecnica STAR)\n"
+                    "3. Tenha perguntas para o entrevistador\n"
+                    "4. Chegue 10 min antes\n"
+                    "5. Vista-se adequadamente\n"
+                    "6. Teste camera/microfone se online")
+        if any(w in msg_lower for w in ["sobre", "o que e", "funciona"]):
+            return ("O Buscador de Vagas TI encontra vagas de Jovem Aprendiz e Estagio em TI em Sao Paulo.\n"
+                    "Funcionalidades:\n"
+                    "- Busca em multiplas fontes (Bing, Indeed, Vagas.com, etc.)\n"
+                    "- Ranqueamento por compatibilidade com seu curriculo\n"
+                    "- Selecao de area/vaga desejada\n"
+                    "- Upload e analise de curriculo\n"
+                    "- Totalmente gratuito!")
+        if any(w in msg_lower for w in ["obrigado", "valeu", "thanks"]):
+            return "De nada! Boa sorte na busca por vagas! Se precisar de mais ajuda, use /ajuda."
+        return "Nao entendi. Use /ajuda para ver os comandos disponiveis."
+
+    # Exibir historico
+    chat_container = st.container()
+    with chat_container:
+        for msg in st.session_state.public_chat:
+            if msg["role"] == "user":
+                st.markdown(f"**Voce:** {msg['content']}")
+            else:
+                st.markdown(f"**Assistente:** {msg['content']}")
+            st.markdown("---")
+
+    # Input
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        user_input = st.text_input("Digite sua mensagem:", key="public_chat_input", placeholder="Ex: /ajuda")
+    with col2:
+        send = st.button("Enviar")
+
+    if send and user_input.strip():
+        st.session_state.public_chat.append({"role": "user", "content": user_input})
+        response = chatbot_response(user_input)
+        st.session_state.public_chat.append({"role": "assistant", "content": response})
+        st.rerun()
+
+    if st.button("Limpar chat"):
+        st.session_state.public_chat = []
+        st.rerun()
 
 # ============================================================
 # PÁGINA: ACESSO ADMIN
