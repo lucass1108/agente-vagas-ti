@@ -1,21 +1,24 @@
 ---
 tags: [vagas, ti, estagio, jovem-aprendiz, candidaturas]
-updated: 2026-11-06
-total_vagas: 67
-novas: 1
+updated: 2026-11-08
+total_vagas: 19
+novas: 4
 total_candidaturas: 0
 followups_pendentes: 0
 ---
 
 # Vagas TI — Lucas Barbosa Pedro
-> Relatório gerado em 06/11/2026 22:59 · Agente v4.0 (completo)
-> Total: 67 vagas · Novas: 1 · Candidaturas: 0 · Follow-ups: 0
+> Relatório gerado em 08/11/2026 15:26 · Agente v4.0 (completo)
+> Total: 19 vagas · Novas: 4 · Candidaturas: 0 · Follow-ups: 0
 
 ## 🆕 Novas desde a última execução
 
 | # | Vaga | Score | Fonte | Link |
 |---|---|---|---|---|
-| 1 | Estágio em Direito Imobiliário | 10 | Catho | [ver](https://www.catho.com.br/vagas/estagio-em-direito-imobiliario/39130039) |
+| 1 | Estágios Estagiários Aprendizes | Faça Parte do Nube | 25 | Bing | [ver](https://www.bing.com/ck/a?!&&p=e974afd7c81304b2008f21dbe3df20ca94144bc7a7460452d1e9755d8c0308bbJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly93d3cubnViZS5jb20uYnIv&ntb=1) |
+| 2 | Companhia de Estágios - Faz o amanhã | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=29efcdb847d1a08764315b1d1d1cf082ff72ea8e4b8a5edb1970b6e7784c160eJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly93d3cuY2lhZGVlc3RhZ2lvcy5jb20uYnIv&ntb=1) |
+| 3 | ESTÁGIO| English translation - Cambridge Dictionary | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=d3a69035a9d4e3067e81341210de3184f3acddcca8c70a2d3a014c71e71c74efJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly9kaWN0aW9uYXJ5LmNhbWJyaWRnZS5vcmcvZGljdGlvbmFyeS9wb3J0dWd1ZXNlLWVuZ2xpc2gvZXN0YWdpbw&ntb=1) |
+| 4 | Programas deEstágioprofissional abertos agora | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=10d9831f5ad66ae1efd4782d3e716b3bc5fadb3f1f3e6f545e7ca426670f901cJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly93d3cuZXN0YWdpb3RyYWluZWUuY29tL3ZhZ2FzLXByb2dyYW1hcy1lc3RhZ2lv&ntb=1) |
 
 ## 🟢 Top Matches (score ≥ 70)
 
@@ -33,81 +36,25 @@ followups_pendentes: 0
 
 | # | Vaga | Score | Fonte | Link |
 |---|---|---|---|---|
-| 1 | Jovem Aprendiz TI | 25 | Vagas.com | [ver](https://www.vagas.com.br/cargo/jovem-aprendiz-ti) |
-| 2 | Jovem aprendiz | 20 | CIEE | [ver](https://www.ciee.org.br/quero-uma-vaga/jovem-aprendiz) |
-| 3 | EmpresaPrecisa de Jovem Aprendiz e/ou Estagiários?Clique aqu | 20 | CIEE | [ver](https://www.ciee.org.br/contrate-com-o-ciee) |
-| 4 | EstudanteVagas de aprendiz ou estágio emtodo Brasil. | 20 | CIEE | [ver](https://www.ciee.org.br/quero-uma-vaga) |
-| 5 | Veja todas as vagas deAprendiz e Estágio | 20 | CIEE | [ver](https://web.ciee.org.br) |
-| 6 | EXPO CIEE 2026 encerra edição histórica com milhares de jove | 20 | CIEE | [ver](https://portal.ciee.org.br/universo-ciee/expo-ciee-2026-encerramento/) |
-| 7 | Programa de Estágio Superio...EstágioPresencialSão Paulo,
-   | 20 | 99jobs | [ver](https://99jobs.com/suzano/jobs/510472-programa-de-estagio-superior-suzano-2027-sao-paulo-sp?utm_source=tagportal&utm_medium=ses_oportunis&utm_campaign=programa-de-estagio-superior-suzano-2027-sao-paulo-sp&utm_id=001) |
-| 8 | Estágioem Dados, Automação e Transformação Digital | 18 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839912/estagio-em-dados-automacao-e-transformacao-digital) |
-| 9 | Estagiário de TI | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagiario-de-ti) |
-| 10 | EstagiárioTI | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839237/estagiario-ti) |
-| 11 | EstágioTécnico -TIPlataforma de Áudio | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839847/estagio-tecnico-ti-plataforma-de-audio) |
-| 12 | AprendizTecnologiae Processos | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839044/aprendiz-tecnologia-e-processos) |
-| 13 | Estagiário(a) de Dados e Banco de Dados | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2841752/estagiario-a-de-dados-e-banco-de-dados) |
-| 14 | Estágioem Ciência de Dados e Gen Ai | Núcleo de Ia Hstern | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839586/estagio-em-ciencia-de-dados-e-gen-ai-nucleo-de-ia-hstern) |
-| 15 | Estágio em TI | 15 | Catho | [ver](https://www.catho.com.br/vagas/estagio-em-ti/39138946) |
-| 16 | Estágio em Tecnologia da Informação | 15 | Catho | [ver](https://www.catho.com.br/vagas/estagio-em-tecnologia-da-informacao/39101562) |
-| 17 | Estágio na área de Tecnologia da Informação | 15 | Catho | [ver](https://www.catho.com.br/vagas/estagio-na-area-de-tecnologia-da-informacao/38060875) |
-| 18 | Estágio EBANX Early Talent ...EstágioPresencialCuritiba,
-    | 15 | 99jobs | [ver](https://99jobs.com/ebanx/jobs/516820-estagio-ebanx-early-talent-tech-edition?utm_source=tagportal&utm_medium=ses_oportunis&utm_campaign=estagio-ebanx-early-talent-tech-edition&utm_id=001) |
-| 19 | Estágio
-          (9) | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-ti?mo%5B%5D=Est%C3%A1gio) |
-| 20 | Estagiário | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2834944/estagiario) |
-| 21 | Estágio- Engenharia | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839074/estagio-engenharia) |
-| 22 | Programa deEstágioB3 - 2026 | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2783038/programa-de-estagio-b3-2026) |
-| 23 | EstágioBp - RH | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2840664/estagio-bp-rh) |
-| 24 | Estágio
-          (7) | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-python?mo%5B%5D=Est%C3%A1gio) |
-| 25 | Estágioem Economia | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2838247/estagio-em-economia) |
-| 26 | Estágioem Engenharia Elétrica | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839537/estagio-em-engenharia-eletrica) |
-| 27 | Banco de Talentos -Estágioem Engenharia | 10 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839779/banco-de-talentos-estagio-em-engenharia) |
-| 28 | Estagiários | 10 | CIEE | [ver](https://www.ciee.org.br/quero-contratar/estagiarios/) |
-| 29 | Aprendizes | 10 | CIEE | [ver](https://www.ciee.org.br/quero-contratar/aprendizes/) |
-| 30 | Prêmio Estagiário Inovador 2026 reconhece projetos que usam  | 10 | CIEE | [ver](https://portal.ciee.org.br/universo-ciee/premio-estagiario-inovador-2026/) |
-| 31 | Não é só de “levar estagiários para várias empresa | 10 | CIEE | [ver](https://www.instagram.com/reel/DfZ4RReykNV/) |
-| 32 | Jovens Aprendizes | 10 | CIEE | [ver](https://www.ciee.org.br/quero-contratar/aprendizes/) |
-| 33 | Estágio em Direito Imobiliário | 10 | Catho | [ver](https://www.catho.com.br/vagas/estagio-em-direito-imobiliario/39130039) |
-| 34 | Estágio T.I | 10 | Catho | [ver](https://www.catho.com.br/vagas/estagio-t.i/38333364) |
-| 35 | Seu estágio tá on! | 10 | 99jobs | [ver](https://99jobs.com/collections/seu-proximo-estagio-ta-on?utm_source=tagportal&utm_medium=colecoes&utm_campaign=estagioon&utm_id=001) |
-| 36 | Trainee futuro líder | 10 | 99jobs | [ver](https://99jobs.com/collections/programas-de-trainee-para-ser-um-futuro-lider?utm_source=tagportal&utm_medium=colecoes&utm_campaign=traineelider&utm_id=001) |
-| 37 | Estágio Técnico Coca-Cola F...EstágioPresencialNão informado | 10 | 99jobs | [ver](https://99jobs.com/coca-cola-femsa/jobs/501422-estagio-tecnico-coca-cola-femsa-brasil-2026?utm_source=tagportal&utm_medium=ses_oportunis&utm_campaign=estagio-tecnico-coca-cola-femsa-brasil-2026&utm_id=001) |
-| 38 | Institucional | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-jovem-aprendiz-ti) |
-| 39 | Aplicativo Vagas de Emprego | 0 | Vagas.com | [ver](https://www.vagas.com.br/aplicativo) |
-| 40 | Vagas de tecnologia | 0 | Vagas.com | [ver](https://tecnologia.vagas.com.br/) |
-| 41 | Aplicativo Vagas | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-jovem-aprendiz-ti) |
-| 42 | Política de Privacidade | 0 | Vagas.com | [ver](https://www.vagas.com.br/politica-privacidade) |
-| 43 | Auxílio desenvolvimento
-          (1) | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-ti?b%5B%5D=Aux%C3%ADlio+desenvolvimento) |
-| 44 | Ginástica laboral
-          (1) | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-ti?b%5B%5D=Gin%C3%A1stica+laboral) |
-| 45 | Informática/T.I. | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-ti?a%5B%5D=24) |
-| 46 | Curitiba / PR
-          (1) | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-python-em-curitiba) |
-| 47 | Ginástica laboral
-          (2) | 0 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagio-python?b%5B%5D=Gin%C3%A1stica+laboral) |
-| 48 | Instituições de Ensino | 0 | CIEE | [ver](https://www.ciee.org.br/instituicoes-de-ensino/) |
-| 49 | Oficinas de Cri@tividades | 0 | CIEE | [ver](https://www.ciee.org.br/quero-apoiar/oficinas-de-criatividades/) |
-| 50 | Relatórios de Atividades CIEE | 0 | CIEE | [ver](https://www.ciee.org.br/conheca-o-ciee/relatorios-de-atividades-do-ciee/) |
-| 51 | Comitê executivo | 0 | CIEE | [ver](https://www.ciee.org.br/conheca-o-ciee/quem-faz-o-ciee#comite-executivo) |
-| 52 | Certidões do CIEE | 0 | CIEE | [ver](https://www.ciee.org.br/conheca-o-ciee/transparencia/certidoes-do-ciee/) |
-| 53 | Hábitos de consumo da Geração Z: jovens priorizam preço e au | 0 | CIEE | [ver](https://portal.ciee.org.br/universo-ciee/habitos-consumo-geracao-z-brasil/) |
-| 54 | Instituição de EnsinoLeve tudo que o CIEE oferece parasua in | 0 | CIEE | [ver](https://www.ciee.org.br/quero-ser-parceiro) |
-| 55 | 🚨 INVESTIGAÇÃO NO CIEE! Tudo começou com uma entre | 0 | CIEE | [ver](https://www.instagram.com/reel/DfUus_zSwkL/) |
-| 56 | Processos Seletivos Públicos | 0 | CIEE | [ver](https://www.ciee.org.br/quero-uma-vaga/processos-seletivos-publicos/) |
-| 57 | Oficinas de criatividades | 0 | CIEE | [ver](https://www.ciee.org.br/quero-apoiar/oficinas-de-criatividades/) |
-| 58 | Anunciar vagas grátis | 0 | Catho | [ver](https://www.catho.com.br/empresas/anunciar-vaga/) |
-| 59 | Cadastrar CV grátis | 0 | Catho | [ver](https://www.catho.com.br/cadastro-candidato/) |
-| 60 | Envie seu currículo grátis | 0 | Catho | [ver](https://www.catho.com.br/cadastro-candidato/) |
-| 61 | Cadastrar meu CV grátis | 0 | Catho | [ver](https://www.catho.com.br/cadastro-candidato/) |
-| 62 | Acesse sua conta ou cadastre-se grátis e informe um CEP | 0 | Catho | [ver](https://www.catho.com.br/cadastro-candidato/) |
-| 63 | Certificação de Qualidade | 0 | Catho | [ver](https://www.catho.com.br/ajuda/candidatos/sobre-a-catho/certificacao-iso/499/) |
-| 64 | Criar Currículo Grátis | 0 | Catho | [ver](https://www.catho.com.br/cadastro-candidato/) |
-| 65 | Soluções para Recrutamento e SeleçãoGerencie processos selet | 0 | 99jobs | [ver](https://eleven.99jobs.com?utm_source=tagportal&utm_medium=menutopo&utm_campaign=paraempresaseleven&utm_id=001) |
-| 66 | Políticas & Diretrizes | 0 | 99jobs | [ver](https://99jobs.com/pages/privacy?utm_source=tagportal&utm_medium=footer&utm_campaign=politicas&utm_id=001) |
-| 67 | Nativeland | 0 | 99jobs | [ver](https://nativeland.99jobs.com/?utm_source=tagportal&utm_medium=footer&utm_campaign=nativeland&utm_id=001) |
+| 1 | Estágios Estagiários Aprendizes | Faça Parte do Nube | 25 | Bing | [ver](https://www.bing.com/ck/a?!&&p=e974afd7c81304b2008f21dbe3df20ca94144bc7a7460452d1e9755d8c0308bbJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly93d3cubnViZS5jb20uYnIv&ntb=1) |
+| 2 | Jovem Aprendiz TI | 25 | Vagas.com | [ver](https://www.vagas.com.br/cargo/jovem-aprendiz-ti) |
+| 3 | Estágioem Dados, Automação e Transformação Digital | 18 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839912/estagio-em-dados-automacao-e-transformacao-digital) |
+| 4 | Companhia de Estágios - Faz o amanhã | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=29efcdb847d1a08764315b1d1d1cf082ff72ea8e4b8a5edb1970b6e7784c160eJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly93d3cuY2lhZGVlc3RhZ2lvcy5jb20uYnIv&ntb=1) |
+| 5 | ESTÁGIO| English translation - Cambridge Dictionary | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=d3a69035a9d4e3067e81341210de3184f3acddcca8c70a2d3a014c71e71c74efJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly9kaWN0aW9uYXJ5LmNhbWJyaWRnZS5vcmcvZGljdGlvbmFyeS9wb3J0dWd1ZXNlLWVuZ2xpc2gvZXN0YWdpbw&ntb=1) |
+| 6 | Programas deEstágioprofissional abertos agora | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=10d9831f5ad66ae1efd4782d3e716b3bc5fadb3f1f3e6f545e7ca426670f901cJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=0a018203-b1b0-6b6d-3eb3-9a08b0396a30&u=a1aHR0cHM6Ly93d3cuZXN0YWdpb3RyYWluZWUuY29tL3ZhZ2FzLXByb2dyYW1hcy1lc3RhZ2lv&ntb=1) |
+| 7 | TRAINEEDefinition & Meaning -Merriam-Webster | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=bf3d3cbd580c63d2bf1bc6ebfc75cd4cefdb52536416154125fde48e499ada66JmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=32a95005-6318-6d98-35d1-480e62096cfd&u=a1aHR0cHM6Ly93d3cubWVycmlhbS13ZWJzdGVyLmNvbS9kaWN0aW9uYXJ5L3RyYWluZWU&ntb=1) |
+| 8 | TRAINEE| English meaning - Cambridge Dictionary | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=8d77a5bd1be120e2c0fe1412e3322e56002dc1bad9e983bc1c9b2f4253a42885JmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=32a95005-6318-6d98-35d1-480e62096cfd&u=a1aHR0cHM6Ly9kaWN0aW9uYXJ5LmNhbWJyaWRnZS5vcmcvZGljdGlvbmFyeS9lbmdsaXNoL3RyYWluZWU&ntb=1) |
+| 9 | AI-MatchedTraineeRoles |Trainee.in - Find Remote & Paid… | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=bb3cfc5bd21407af124c5c011cc56e5cb2ddb0df27862107b788701e1f6a8c9bJmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=32a95005-6318-6d98-35d1-480e62096cfd&u=a1aHR0cHM6Ly90cmFpbmVlLmluLw&ntb=1) |
+| 10 | Trainee- definition oftraineeby The Free Dictionary | 15 | Bing | [ver](https://www.bing.com/ck/a?!&&p=1a10d8b9fb16d1f9a19d284adf43b752c85e5a71e4c2ea3ddbcb731d4eae2b33JmltdHM9MTc5NDA5NjAwMA&ptn=3&ver=2&hsh=4&fclid=32a95005-6318-6d98-35d1-480e62096cfd&u=a1aHR0cHM6Ly93d3cudGhlZnJlZWRpY3Rpb25hcnkuY29tL3RyYWluZWU&ntb=1) |
+| 11 | Estagiário de TI | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas-de-estagiario-de-ti) |
+| 12 | EstagiárioTI | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839237/estagiario-ti) |
+| 13 | EstágioTécnico -TIPlataforma de Áudio | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839847/estagio-tecnico-ti-plataforma-de-audio) |
+| 14 | AprendizTecnologiae Processos | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839044/aprendiz-tecnologia-e-processos) |
+| 15 | Estagiário(a) de Dados e Banco de Dados | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2841752/estagiario-a-de-dados-e-banco-de-dados) |
+| 16 | Estágioem Ciência de Dados e Gen Ai | Núcleo de Ia Hstern | 15 | Vagas.com | [ver](https://www.vagas.com.br/vagas/v2839586/estagio-em-ciencia-de-dados-e-gen-ai-nucleo-de-ia-hstern) |
+| 17 | Estágio em TI | 15 | Catho | [ver](https://www.catho.com.br/vagas/estagio-em-ti/39138946) |
+| 18 | Estágio em Tecnologia da Informação | 15 | Catho | [ver](https://www.catho.com.br/vagas/estagio-em-tecnologia-da-informacao/39101562) |
+| 19 | Estágio na área de Tecnologia da Informação | 15 | Catho | [ver](https://www.catho.com.br/vagas/estagio-na-area-de-tecnologia-da-informacao/38060875) |
 
 ## 📋 Minhas Candidaturas
 
@@ -115,6 +62,6 @@ followups_pendentes: 0
 > Use: `python vagas_agent.py --candidatura "Vaga" --status candidatado`
 
 ---
-> Total vagas: 67 · Novas: 1 · Candidaturas: 0 · Follow-ups: 0
-> Última execução: 2026-11-06T22:47:04.202177
+> Total vagas: 19 · Novas: 4 · Candidaturas: 0 · Follow-ups: 0
+> Última execução: 2026-11-06T22:59:10.923804
 > Comandos: `--email` `--telegram` `--listar` `--stats` `--entrevista` `--curriculo` `--dashboard` `--analytics`
