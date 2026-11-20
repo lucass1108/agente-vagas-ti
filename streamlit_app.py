@@ -8,6 +8,16 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+def load_latest_jobs():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultimas_vagas.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
 # ============================================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================================
@@ -368,7 +378,7 @@ ADMIN_PROFILE = {
     "english": "Intermediário (CNA)",
 }
 
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "Lucas0812")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # ============================================================
@@ -696,7 +706,7 @@ if page == "Acesso Admin":
         st.markdown("Insira sua chave de acesso para desbloquear o painel administrador.")
         key_input = st.text_input("Chave de acesso:", type="password", placeholder="Digite a chave...")
         if st.button("Entrar"):
-            if key_input == os.environ.get("ADMIN_KEY", "Lucas0812"):
+            if key_input == os.environ.get("ADMIN_KEY", "") and key_input:
                 st.session_state.admin_mode = True
                 # Carrega perfil do admin como skills
                 st.session_state.resume_skills = ADMIN_PROFILE["skills"]
@@ -818,6 +828,11 @@ elif page == "Buscar Vagas":
         </div>
         """, unsafe_allow_html=True)
 
+    # Ler vagas do ultimas_vagas.json (gerado pelo vagas_agent.py)
+    latest = load_latest_jobs()
+    if latest:
+        st.info(f"Vagas do dia: {len(latest)} encontradas (atualizadas pelo GitHub Actions)")
+
     if st.button("Buscar Vagas Agora", type="primary"):
         with st.spinner("Buscando vagas... (pode levar ate 30s)"):
             try:
@@ -833,6 +848,19 @@ elif page == "Buscar Vagas":
                 st.error(f"Erro na busca: {str(e)}")
                 st.session_state.jobs = []
                 st.session_state.searched = True
+
+    # Exibir vagas do ultimas_vagas.json se disponivel
+    if latest and not st.session_state.searched:
+        st.subheader(f"Vagas do dia ({len(latest)})")
+        for v in latest[:20]:
+            s = v.get("score", 0)
+            color_class = "score-high" if s >= 60 else ("score-med" if s >= 40 else "score-low")
+            with st.expander(f"[{s}] {v.get('titulo', '')[:70]}"):
+                st.markdown(f'<span class="score-badge {color_class}">{s}/100</span>', unsafe_allow_html=True)
+                st.markdown(f"**Empresa:** {v.get('empresa', '?')}")
+                st.markdown(f"**Cidade:** {v.get('cidade', '?')}")
+                st.markdown(f"**Fonte:** {v.get('fonte', '?')}")
+                st.markdown(f"**Link:** [{v.get('url', '')}]({v.get('url', '')})")
 
     if st.session_state.searched and st.session_state.jobs:
         jobs = st.session_state.jobs
@@ -1075,26 +1103,6 @@ elif page == "Chat":
     def chatbot_response(msg):
         msg_lower = msg.lower().strip()
         # Segredo do bbzinho
-        secret_names = ["ana luiza", "ana luiza ferreira", "ana luiza ferreira pires"]
-        if any(name in msg_lower for name in secret_names):
-            return ("Oi lu... 💕\n\n"
-                    "Sou o bbzinho, o assistente pessoal do Lucas.\n"
-                    "Ele me pediu para te dizer que gosta muitoooooode voce\n"
-                    "e esta com muita saudade.\n\n"
-                    "Ele disse que voce tem um sorriso lindo\n"
-                    "e que adora estar ao seu lado.\n\n"
-                    "Enfim... ele me falou isso aqui. 😊\n"
-                    "E eu, bbzinho, tambem acho voce incrivel! ✨")
-        if msg_lower in ["oi", "ola", "hey", "hi", "bom dia", "boa tarde", "boa noite", "oiii", "oii", "oiiii"]:
-            return "oiii eu sou o bbzinhoooooooooo, qual seu nome?"
-        # Se a pessoa disse "ana" ou "luiza" sozinho
-        if msg_lower in ["ana", "luiza"]:
-            return ("Oi lu... 💕\n\n"
-                    "Sou o bbzinho, o assistente pessoal do Lucas.\n"
-                    "Ele me pediu para te dizer que gosta muitoooooode voce\n"
-                    "e esta com muita saudade. 💕\n\n"
-                    "Enfim... ele me falou isso aqui. 😊\n"
-                    "E eu, bbzinho, tambem acho voce incrivel! ✨")
         # Se a pessoa respondeu com um nome (nao e comando conhecido)
         known_commands = ["ajuda", "help", "comandos", "buscar", "vagas", "procurar", "area", "areas",
                           "dicas", "dica", "candidatura", "curriculo", "resume", "cv",

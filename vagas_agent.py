@@ -1,401 +1,339 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Agente de Vagas TI - Lucas Barbosa Pedro (v4.0 — Completo)
-============================================================
-Busca vagas de Jovem Aprendiz / Estágio em TI, ranqueia por compatibilidade,
-gera relatório no Obsidian + email + Telegram, rastreia candidaturas,
-gera prep de entrevista, currículo personalizado, dashboard e analytics.
-
-Uso:
-    python vagas_agent.py                    # busca e gera nota
-    python vagas_agent.py --email            # busca + email
-    python vagas_agent.py --telegram         # busca + Telegram
-    python vagas_agent.py --schedule         # modo agendado
-    python vagas_agent.py --candidatura "Vaga" --status candidatado
-    python vagas_agent.py --listar           # listar candidaturas
-    python vagas_agent.py --stats            # estatísticas
-    python vagas_agent.py --entrevista "Vaga"  # prep de entrevista
-    python vagas_agent.py --curriculo "Vaga"    # currículo personalizado
-    python vagas_agent.py --dashboard         # gerar dashboard Obsidian Base
-    python vagas_agent.py --analytics         # analytics completo
-
-Dependências:
-    pip install requests beautifulsoup4 schedule
-"""
-
-import os
-import re
-import sys
-import json
-import time
-import smtplib
-import schedule
-import subprocess
-import argparse
-from datetime import datetime, timedelta
-from email.mime.text import MIMEText
+"""Agente Vagas TI v5.0 - busca (Gupy/Adzuna), score, historico e email HTML."""
+import os, sys, json, re, smtplib, argparse
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
-from urllib.parse import quote_plus, urljoin
+from email.mime.text import MIMEText
+from html import escape
+from pathlib import Path
 
-try:
-    import requests
-    from bs4 import BeautifulSoup
-except ImportError:
-    print("Instale: pip install requests beautifulsoup4 schedule")
-    sys.exit(1)
+import requests
 
-# ============================================================
-# CONFIG
-# ============================================================
-CONFIG = {
-    "vault_path": os.environ.get("VAULT_PATH", os.getcwd() if not os.path.exists(r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI") else r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI"),
-    "note_name": "Vagas TI - Lucas.md",
-    "history_file": "vagas_history.json",
-    "applications_file": "candidaturas.json",
-    "salaries_file": "salarios.json",
-    "email_enabled": True,
-    "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587,
-    "email_from": "lucasbarbosapedro1108@gmail.com",
-    "email_password": os.environ.get("EMAIL_PASSWORD", "citk afua kbcg jxrf"),
-    "email_to": "lucasbarbosapedro1108@gmail.com",
-    "telegram_enabled": False,
-    "telegram_bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
-    "telegram_chat_id": os.environ.get("TELEGRAM_CHAT_ID", ""),
-    "toast_enabled": True,
-    "max_retries": 3,
-    "retry_delay": 2,
-    "schedule_hours": 24,
-    "followup_days": 7,
-    "cities": ["São Paulo"],
-    "llm_api_key": os.environ.get("LLM_API_KEY", ""),
-    "llm_provider": "openai",  # openai, anthropic, gemini
-}
+BASE = Path(__file__).parent
+HIST_FILE = BASE / "historico_vagas.json"
+OUT_FILE = BASE / "ultimas_vagas.json"
+REPO_URL = "https://github.com/lucass1108/agente-vagas-ti"
 
-# ============================================================
-# PERFIL DO CANDIDATO
-# ============================================================
-PROFILE = {
-    "name": "Lucas Barbosa Pedro",
-    "phone": "(11) 91508-2460",
-    "email": "lucasbarbosapedro1108@gmail.com",
-    "linkedin": "linkedin.com/in/lucasbarbosapedro",
-    "github": "github.com/lucass1108",
-    "location": "São Paulo - SP",
-    "education": "Análise e Desenvolvimento de Sistemas (ADS) — UNIFECAF (2º sem)",
-    "skills": {
-        "strong": ["python", "sql", "flask", "mysql"],
-        "medium": ["git", "github", "html", "css", "linux"],
-        "basic": ["windows", "excel", "office", "redes", "atendimento", "backoffice"],
+EMAIL_USER = os.getenv("EMAIL_USER", "lucasbarbosapedro1108@gmail.com")
+EMAIL_TO = os.getenv("EMAIL_TO", EMAIL_USER)
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+ADZUNA_ID = os.getenv("ADZUNA_APP_ID", "")
+ADZUNA_KEY = os.getenv("ADZUNA_APP_KEY", "")
+
+# ---------- PERFIL (embutido) ----------
+PERFIL = {
+    "cidades": ["são paulo", "sao paulo", "taboão da serra", "taboao da serra",
+                "osasco", "embu", "remoto", "home office", "sp"],
+    "stack": {
+        "python": 8, "sql": 6, "flask": 4, "mysql": 4, "git": 3, "node": 3,
+        "javascript": 3, "html": 2, "css": 1, "dados": 4, "data": 4,
+        "suporte": 3, "backend": 4, "back-end": 4, "desenvolvimento": 3,
+        "desenvolvedor": 3, "sistemas": 2, "api": 2, "automação": 3,
     },
-    "projects": [
-        {"name": "FinanceTracker", "tech": "Python, Flask, MySQL, Git",
-         "desc": "App web de controle financeiro: receitas, despesas, limites, metas, alertas"},
-        {"name": "BrutalFit Expo", "tech": "Python, MySQL",
-         "desc": "Sistema de gestão de academia: CRUD completo, 2 perfis (ADM/ALUNO)"},
-    ],
-    "experience": "Agente de Relacionamento I (Backoffice) — Sercom/Claro (jan/2026-atual)",
-    "achievements": ["Medalha de ouro CUCO/USP 2023", "Medalhista OBMEP", "Medalhista OMASP"],
-    "english": "Intermediário (CNA)",
-    "area_keywords": ["suporte", "dados", "desenvolvimento", "ti", "tecnologia",
-                      "informática", "help desk", "infraestrutura", "programação",
-                      "analista", "back-end", "frontend", "fullstack", "dev"],
-    "level_keywords": ["jovem aprendiz", "estágio", "estagiário", "aprendiz", "trainee"],
-    "negative_keywords": ["experiência prévia em ti", "experiência em ti",
-                          "inglês avançado", "inglês fluente", "3 anos",
-                          "2 anos de experiência", "experiência comprovada"],
+    "nivel": ["estágio", "estagio", "estagiário", "estagiario", "jovem aprendiz",
+              "aprendiz", "trainee", "júnior", "junior"],
+    "ti": ["ti", "tecnologia", "software", "desenvolv", "sistemas", "dados",
+           "programa", "suporte", "analista", "dev", "qa", "infra"],
+    "evitar": ["sênior", "senior", "pleno", "especialista", "líder", "lider",
+               "coordenador", "gerente", "arquiteto", "staff", "tech lead"],
 }
-
-APPLICATION_STATUSES = {
-    "nao_candidatado": {"label": "Não candidatado", "icon": "⬜", "color": "gray"},
-    "candidatado": {"label": "Candidatado", "icon": "🟦", "color": "blue"},
-    "em_analise": {"label": "Em análise", "icon": "🟨", "color": "yellow"},
-    "entrevista": {"label": "Entrevista", "icon": "🟩", "color": "green"},
-    "rejeitado": {"label": "Não selecionado", "icon": "🔴", "color": "red"},
-    "aprovado": {"label": "Aprovado! 🎉", "icon": "🟢", "color": "green"},
-}
-
-# ============================================================
-# FONTES DE BUSCA
-# ============================================================
-SEARCH_QUERIES = [
-    "jovem aprendiz ti São Paulo",
-    "estágio ti suporte São Paulo",
-    "estágio desenvolvimento python São Paulo",
-    "estágio dados São Paulo",
-    "jovem aprendiz suporte técnico São Paulo",
-    "estágio help desk São Paulo",
-    "estágio infraestrutura São Paulo",
-    "estágio back-end python São Paulo",
-    "jovem aprendiz ti São Paulo sem experiência",
-    "estágio analista dados São Paulo",
-    "estágio desenvolvedor web São Paulo",
-    "trainee ti São Paulo",
+TERMOS_BUSCA = [
+    "estágio desenvolvimento", "estágio python", "estágio ti", "estágio dados",
+    "estágio suporte ti", "jovem aprendiz ti", "jovem aprendiz tecnologia",
+    "estágio backend", "estágio sistemas",
 ]
+HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/5.0)"}
+TOP_MIN, MEDIA_MIN = 60, 40
 
-DIRECT_SEARCH_URLS = [
-    ("Indeed", "https://br.indeed.com/jobs?q=jovem+aprendiz+ti&l=S%C3%A3o+Paulo%2C+SP"),
-    ("Indeed", "https://br.indeed.com/jobs?q=est%C3%A1gio+ti+suporte&l=S%C3%A3o+Paulo%2C+SP"),
-    ("Indeed", "https://br.indeed.com/jobs?q=est%C3%A1gio+python&l=S%C3%A3o+Paulo%2C+SP"),
-    ("Vagas.com", "https://www.vagas.com.br/vagas-de-jovem-aprendiz-ti"),
-    ("Vagas.com", "https://www.vagas.com.br/vagas-de-estagio-ti"),
-    ("Vagas.com", "https://www.vagas.com.br/vagas-de-estagio-python"),
-    ("Gupy", "https://portal.gupy.io/job-search?jobName=jovem+aprendiz+ti"),
-    ("Gupy", "https://portal.gupy.io/job-search?jobName=estagio+ti"),
-    ("CIEE", "https://www.ciee.org.br/portal/estudantes/vagas"),
-    ("NUBE", "https://www.nube.com.br/vagas-de-estagio"),
-    ("Catho", "https://www.catho.com.br/vagas/estagio-ti/"),
-    ("99jobs", "https://99jobs.com/vagas?search=estagio+ti"),
-]
 
-# ============================================================
-# SCORING
-# ============================================================
-def score_job(job: dict) -> int:
-    text = (job.get("title", "") + " " + job.get("description", "")).lower()
-    score = 0
+# ---------- FONTES ----------
+def buscar_gupy(termo):
+    vagas = []
+    try:
+        r = requests.get(
+            "https://portal.api.gupy.io/api/job",
+            params={"jobName": termo, "limit": 50, "offset": 0},
+            headers=HEADERS, timeout=25,
+        )
+        r.raise_for_status()
+        for j in r.json().get("data", []):
+            vagas.append({
+                "titulo": (j.get("name") or "").strip(),
+                "empresa": (j.get("careerPageName") or "").strip(),
+                "cidade": ", ".join(x for x in [j.get("city"), j.get("state")] if x),
+                "url": j.get("jobUrl") or "",
+                "tipo": (j.get("type") or "").lower(),
+                "remoto": (j.get("workplaceType") or "").lower() == "remote",
+                "descricao": (j.get("description") or ""),
+                "data": j.get("publishedDate") or "",
+                "fonte": "Gupy",
+            })
+    except Exception as e:
+        print(f"[aviso] Gupy '{termo}': {e}")
+    return vagas
 
-    area_hits = sum(1 for kw in PROFILE["area_keywords"] if kw in text)
-    score += min(area_hits * 5, 30)
 
-    all_skills = PROFILE["skills"]["strong"] + PROFILE["skills"]["medium"] + PROFILE["skills"]["basic"]
-    for kw in all_skills:
-        if kw in text:
-            score += 5 if kw in PROFILE["skills"]["strong"] else (3 if kw in PROFILE["skills"]["medium"] else 1)
-    score = min(score, 55)
+def buscar_adzuna(termo):
+    if not (ADZUNA_ID and ADZUNA_KEY):
+        return []
+    vagas = []
+    try:
+        r = requests.get(
+            "https://api.adzuna.com/v1/api/jobs/br/search/1",
+            params={"app_id": ADZUNA_ID, "app_key": ADZUNA_KEY, "what": termo,
+                    "where": "São Paulo", "results_per_page": 30,
+                    "sort_by": "date"},
+            headers=HEADERS, timeout=25,
+        )
+        r.raise_for_status()
+        for j in r.json().get("results", []):
+            vagas.append({
+                "titulo": (j.get("title") or "").strip(),
+                "empresa": ((j.get("company") or {}).get("display_name") or "").strip(),
+                "cidade": ((j.get("location") or {}).get("display_name") or ""),
+                "url": j.get("redirect_url") or "",
+                "tipo": "",
+                "remoto": False,
+                "descricao": j.get("description") or "",
+                "data": j.get("created") or "",
+                "fonte": "Adzuna",
+            })
+    except Exception as e:
+        print(f"[aviso] Adzuna '{termo}': {e}")
+    return vagas
 
-    level_hits = sum(1 for kw in PROFILE["level_keywords"] if kw in text)
-    score += min(level_hits * 10, 20)
 
-    if "são paulo" in text or "sao paulo" in text:
-        score += 15
-    elif "remoto" in text or "híbrido" in text or "hibrido" in text or "home office" in text:
-        score += 12
-    elif "osasco" in text or "embu" in text or "cotia" in text or "itapecerica" in text or "taboão" in text or "taboao" in text:
-        score += 8
+# ---------- VALIDAÇÃO / SCORE ----------
+def valida(v):
+    return (len(v["titulo"]) > 5 and v["url"].startswith("http")
+            and not v["titulo"].isdigit())
 
-    if "6h" in text or "30h" in text or "meio período" in text or "part-time" in text or "6 horas" in text:
-        score += 10
-    elif "40h" in text:
-        score += 3
 
-    if "primeira experiência" in text or "sem experiência" in text or "sem experiencia" in text:
-        score += 5
-    if "capacitação" in text or "treinamento" in text or "mentoria" in text or "capacitacao" in text:
-        score += 3
-    if "remoto" in text or "home office" in text or "home-office" in text:
-        score += 3
+def dias_desde(data_iso):
+    try:
+        d = datetime.fromisoformat(data_iso.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - d).days
+    except Exception:
+        return None
 
-    for neg in PROFILE["negative_keywords"]:
-        if neg in text:
-            score -= 20
-    if "inglês avançado" in text or "ingles avancado" in text or "inglês fluente" in text:
-        score -= 15
-    if "experiência na área" in text or "experiencia na area" in text:
-        score -= 10
-    if not any(kw in text for kw in PROFILE["level_keywords"]):
-        score -= 20
-    ti_check = ["ti", "tecnologia", "informatica", "suporte", "desenvolvimento",
-                "programacao", "dados", "infraestrutura", "sistemas",
-                "computacao", "help desk", "analista", "dev", "software",
-                "hardware", "redes", "banco de dados", "python", "sql", "flask", "mysql"]
-    if not any(kw in text for kw in ti_check):
-        score -= 40
 
-    return max(0, min(100, score))
+def calcula_score(v):
+    titulo = v["titulo"].lower()
+    texto = f"{titulo} {re.sub(r'<[^>]+>', ' ', v['descricao']).lower()}"
+    local = f"{v['cidade']} {titulo}".lower()
+    score, motivos = 0, []
 
-# ============================================================
-# BUSCA COM RETRY
-# ============================================================
-def fetch_with_retry(url, headers, max_retries=None):
-    if max_retries is None:
-        max_retries = CONFIG["max_retries"]
-    for attempt in range(max_retries):
-        try:
-            resp = requests.get(url, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                return resp
-            elif resp.status_code == 429:
-                time.sleep(CONFIG["retry_delay"] * (attempt + 1))
-            else:
-                time.sleep(CONFIG["retry_delay"])
-        except requests.exceptions.RequestException as e:
-            print(f"  [AVISO] Tentativa {attempt+1}/{max_retries} falhou: {e}")
-            time.sleep(CONFIG["retry_delay"] * (attempt + 1))
-    return None
+    if any(n in titulo for n in PERFIL["nivel"]) or any(
+            t in v["tipo"] for t in ("intern", "apprentice", "trainee")):
+        score += 25; motivos.append("nível compatível")
+    if any(t in titulo for t in PERFIL["ti"]):
+        score += 20; motivos.append("área TI")
 
-def search_bing(query):
-    results = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-    }
-    url = f"https://www.bing.com/search?q={quote_plus(query)}"
-    resp = fetch_with_retry(url, headers)
-    if not resp:
-        return results
-    soup = BeautifulSoup(resp.text, "html.parser")
-    for result in soup.select("li.b_algo"):
-        title_el = result.select_one("h2 a")
-        snippet_el = result.select_one(".b_caption p")
-        if not title_el:
-            continue
-        title = title_el.get_text(strip=True)
-        link = title_el.get("href", "")
-        snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-        combined = (title + " " + snippet).lower()
-        # Filtra apenas vagas de TI
-        ti_keywords = ["ti", "tecnologia", "informática", "informatica", "suporte", "desenvolvimento",
-                       "programação", "programacao", "dados", "infraestrutura", "sistemas",
-                       "computação", "computacao", "help desk", "analista", "dev", "software",
-                       "hardware", "redes", "banco de dados", "python", "sql", "flask", "mysql"]
-        if not any(kw in combined for kw in ti_keywords):
-            continue
-        results.append({"title": title, "link": link, "description": snippet, "source": "Bing"})
-    return results
+    stack = [(k, p) for k, p in PERFIL["stack"].items()
+             if re.search(rf"\b{re.escape(k)}", texto)]
+    pts = min(30, sum(p for _, p in stack))
+    if pts:
+        score += pts; motivos.append("stack: " + ", ".join(k for k, _ in stack[:4]))
 
-def search_jobs() -> list[dict]:
-    jobs = []
-    seen = set()
+    if v["remoto"] or any(c in local for c in PERFIL["cidades"]):
+        score += 15; motivos.append("local ok")
 
-    print("  [1/2] Buscando no Bing...")
-    for query in SEARCH_QUERIES:
-        try:
-            res = search_bing(query)
-            for r in res:
-                combined = (r["title"] + " " + r["description"]).lower()
-                if not any(kw in combined for kw in PROFILE["level_keywords"]):
-                    continue
-                key = r["title"].lower().strip()
-                if key in seen:
-                    continue
-                seen.add(key)
-                jobs.append(r)
-            time.sleep(1)
-        except Exception as e:
-            print(f"  [AVISO] Erro na busca '{query}': {e}")
+    d = dias_desde(v["data"])
+    if d is not None and d <= 7:
+        score += 10; motivos.append("recente")
 
-    print(f"  [2/2] Buscando em sites diretos...")
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-    }
-    for source_name, url in DIRECT_SEARCH_URLS:
-        try:
-            resp = fetch_with_retry(url, headers)
-            if not resp:
-                continue
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for a in soup.select("a"):
-                text = a.get_text(strip=True)
-                href = a.get("href", "")
-                if len(text) < 10 or len(text) > 120:
-                    continue
-                combined = text.lower()
-                ti_keywords = ["ti", "tecnologia", "informática", "informatica", "suporte", "desenvolvimento",
-                               "programação", "programacao", "dados", "infraestrutura", "sistemas",
-                               "computação", "computacao", "help desk", "analista", "dev", "software",
-                               "hardware", "redes", "banco de dados", "python", "sql", "flask", "mysql"]
-                if not any(kw in combined for kw in ti_keywords):
-                    continue
-                if not any(kw in combined for kw in PROFILE["level_keywords"]):
-                    continue
-                key = text.lower().strip()
-                if key in seen:
-                    continue
-                seen.add(key)
-                jobs.append({
-                    "title": text,
-                    "link": urljoin(url, href) if href else url,
-                    "description": f"Fonte: {source_name}",
-                    "source": source_name,
-                })
-            time.sleep(1)
-        except Exception as e:
-            print(f"  [AVISO] Erro ao acessar {source_name}: {e}")
+    if any(e in titulo for e in PERFIL["evitar"]):
+        score -= 50; motivos.append("nível acima")
 
-    # Filtra por localização: apenas SP e remoto/híbrido
-    # Remove vagas que mencionam explicitamente outras cidades/estados
-    other_locations = ["rio de janeiro", "rj", "belo horizonte", "bh", "curitiba", "porto alegre",
-                       "salvador", "fortaleza", "recife", "brasília", "brasilia", "goiânia",
-                       "goiania", "campinas", "santos", "guarulhos", "manaus", "belém",
-                       "florianópolis", "florianopolis", "natal", "joão pessoa", "maceió",
-                       "teresina", "campo grande", "cuiabá", "vitória", "aracaju"]
-    sp_ok = ["são paulo", "sao paulo", "taboão", "taboao", "osasco", "embu", "cotia",
-             "itapecerica", "remoto", "híbrido", "hibrido", "home office", "home-office",
-             "grande sp", "abc", "zona sul", "zona norte", "zona leste", "zona oeste",
-             "centro", "pinheiros", "vila olimpia", "itaim", "moema", "barra funda",
-             "jabaquara", "santo amaro", "morumbi", "paulista", "consolação", "liberdade"]
-    filtered = []
-    for job in jobs:
-        text = (job.get("title", "") + " " + job.get("description", "")).lower()
-        # Se menciona outra cidade/estado explicitamente, descarta
-        if any(loc in text for loc in other_locations):
-            continue
-        filtered.append(job)
-    return filtered
+    v["score"] = max(0, min(100, score))
+    v["motivos"] = motivos
+    return v
 
-# ============================================================
-# DEDUPLICAÇÃO
-# ============================================================
-def deduplicate(jobs):
-    unique = []
-    seen_titles = set()
-    for job in jobs:
-        norm = re.sub(r'[^a-z0-9]', '', job["title"].lower())
-        norm = norm[:40]
-        if norm in seen_titles:
-            continue
-        seen_titles.add(norm)
-        unique.append(job)
-    return unique
 
-# ============================================================
-# HISTÓRICO
-# ============================================================
-def load_history():
-    path = os.path.join(CONFIG["vault_path"], CONFIG["history_file"])
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return {"seen": [], "last_run": None}
-    return {"seen": [], "last_run": None}
+# ---------- HISTÓRICO ----------
+def carrega_hist():
+    try:
+        return set(json.loads(HIST_FILE.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
 
-def save_history(jobs):
-    path = os.path.join(CONFIG["vault_path"], CONFIG["history_file"])
-    history = load_history()
-    seen = set(history.get("seen", []))
-    for job in jobs:
-        seen.add(job["title"].lower().strip())
-    history["seen"] = list(seen)
-    history["last_run"] = datetime.now().isoformat()
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
 
-def get_new_jobs(jobs, history):
-    seen = set(history.get("seen", []))
-    return [j for j in jobs if j["title"].lower().strip() not in seen]
+def salva_hist(urls):
+    HIST_FILE.write_text(json.dumps(sorted(urls)[-3000:], ensure_ascii=False),
+                         encoding="utf-8")
 
-# ============================================================
-# RASTREAMENTO DE CANDIDATURAS
-# ============================================================
+
+# ---------- COLETA ----------
+def coletar():
+    bruto = []
+    for t in TERMOS_BUSCA:
+        bruto += buscar_gupy(t)
+        bruto += buscar_adzuna(t)
+    vistos, unicas = set(), []
+    for v in bruto:
+        if valida(v) and v["url"] not in vistos:
+            vistos.add(v["url"])
+            unicas.append(calcula_score(v))
+    unicas = [v for v in unicas if v["score"] >= 20]
+    unicas.sort(key=lambda x: x["score"], reverse=True)
+
+    hist = carrega_hist()
+    for v in unicas:
+        v["nova"] = v["url"] not in hist
+    return unicas, hist
+
+
+# ---------- EMAIL ----------
+def cor(score):
+    return "#16a34a" if score >= TOP_MIN else "#f59e0b" if score >= MEDIA_MIN else "#ef4444"
+
+
+def monta_html(vagas, top_n=10):
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    total = len(vagas)
+    tops = sum(v["score"] >= TOP_MIN for v in vagas)
+    medias = sum(MEDIA_MIN <= v["score"] < TOP_MIN for v in vagas)
+    novas = sum(v["nova"] for v in vagas)
+
+    def stat(n, label):
+        return (f'<td align="center" style="padding:10px 14px;background:#f1f5f9;'
+                f'border-radius:8px"><div style="font-size:22px;font-weight:700;'
+                f'color:#4f46e5">{n}</div><div style="font-size:11px;color:#64748b">'
+                f'{label}</div></td><td width="8"></td>')
+
+    cards = ""
+    for i, v in enumerate(vagas[:top_n], 1):
+        c = cor(v["score"])
+        badge_novo = ('<span style="background:#4f46e5;color:#fff;font-size:10px;'
+                      'padding:2px 6px;border-radius:8px;margin-left:6px">NOVA</span>'
+                      if v["nova"] else "")
+        meta = " · ".join(x for x in [v["empresa"], v["cidade"], v["fonte"]] if x)
+        mot = escape(" • ".join(v["motivos"])) or "—"
+        cards += f'''
+<tr><td style="padding:6px 0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;
+border-left:4px solid {c};border-radius:8px"><tr><td style="padding:12px 14px">
+<div style="font-size:15px;font-weight:700;color:#0f172a">{i}. {escape(v["titulo"])}{badge_novo}</div>
+<div style="font-size:12px;color:#64748b;margin:3px 0">{escape(meta)}</div>
+<div style="font-size:12px;color:#475569;margin-bottom:6px">{mot}</div>
+<span style="background:{c};color:#fff;font-size:12px;font-weight:700;
+padding:3px 10px;border-radius:12px">{v["score"]}/100</span>
+&nbsp;<a href="{escape(v["url"])}" style="color:#4f46e5;font-size:13px;
+text-decoration:none;font-weight:600">Ver vaga →</a>
+</td></tr></table></td></tr>'''
+
+    return f'''<!DOCTYPE html><html><body style="margin:0;background:#e2e8f0;
+font-family:Arial,Helvetica,sans-serif"><table width="100%" cellpadding="0"
+cellspacing="0"><tr><td align="center" style="padding:16px">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;
+background:#fff;border-radius:12px;overflow:hidden">
+<tr><td align="center" style="background:#4f46e5;padding:24px;color:#fff">
+<div style="font-size:22px;font-weight:700">Vagas TI - Lucas</div>
+<div style="font-size:12px;opacity:.9;margin-top:4px">{agora} | {total} vagas | {novas} novas</div>
+</td></tr>
+<tr><td style="padding:18px"><table cellpadding="0" cellspacing="0"><tr>
+{stat(total, "Total")}{stat(tops, f"Top ({TOP_MIN}+)")}{stat(medias, "Médias")}{stat(novas, "Novas")}
+</tr></table></td></tr>
+<tr><td style="padding:0 18px"><div style="font-size:16px;font-weight:700;color:#0f172a;
+border-bottom:2px solid #4f46e5;padding-bottom:6px;margin-bottom:6px">Top {min(top_n, total)} vagas</div>
+<table width="100%" cellpadding="0" cellspacing="0">{cards}</table></td></tr>
+<tr><td align="center" style="padding:20px"><a href="{REPO_URL}"
+style="background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:700;
+padding:12px 24px;border-radius:8px;display:inline-block">Ver todas no GitHub</a></td></tr>
+<tr><td align="center" style="padding:0 18px 18px;font-size:11px;color:#94a3b8">
+Agente Vagas TI v5.0 · gerado automaticamente</td></tr>
+</table></td></tr></table></body></html>'''
+
+
+def envia_email(html, assunto):
+    if not EMAIL_PASSWORD:
+        sys.exit("EMAIL_PASSWORD não definido.")
+    msg = MIMEMultipart("alternative")
+    msg["Subject"], msg["From"], msg["To"] = assunto, EMAIL_USER, EMAIL_TO
+    msg.attach(MIMEText("Abra este email em um cliente com suporte a HTML.", "plain"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+        s.login(EMAIL_USER, EMAIL_PASSWORD)
+        s.sendmail(EMAIL_USER, [EMAIL_TO], msg.as_string())
+    print("Email enviado.")
+
+
+# ---------- OBSIDIAN NOTE ----------
+def gera_nota_obsidian(vagas):
+    """Gera nota markdown para o Obsidian."""
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    top = [v for v in vagas if v["score"] >= TOP_MIN]
+    mid = [v for v in vagas if MEDIA_MIN <= v["score"] < TOP_MIN]
+    low = [v for v in vagas if v["score"] < MEDIA_MIN]
+
+    lines = [
+        "---",
+        "tags: [vagas, ti, estagio, jovem-aprendiz]",
+        f"updated: {datetime.now().strftime('%Y-%m-%d')}",
+        f"total_vagas: {len(vagas)}",
+        f"novas: {sum(v['nova'] for v in vagas)}",
+        "---",
+        "",
+        "# Vagas TI",
+        f"> Relatório gerado em {agora} · Agente v5.0",
+        f"> Total: {len(vagas)} vagas · Novas: {sum(v['nova'] for v in vagas)} · Top: {len(top)} · Médias: {len(mid)}",
+        "",
+    ]
+
+    novas = [v for v in vagas if v["nova"]]
+    if novas:
+        lines += ["## 🆕 Novas desde a última execução", "",
+                  "| # | Vaga | Score | Empresa | Link |", "|---|---|---|---|---|"]
+        for i, v in enumerate(sorted(novas, key=lambda x: x["score"], reverse=True), 1):
+            lines.append(f"| {i} | {v['titulo'][:50]} | {v['score']} | {v['empresa'][:20]} | [ver]({v['url']}) |")
+        lines.append("")
+
+    lines += ["## 🟢 Top Matches (score ≥ 60)", "",
+              "| # | Vaga | Score | Empresa | Cidade | Link |", "|---|---|---|---|---|---|"]
+    for i, v in enumerate(top, 1):
+        novo = " 🆕" if v["nova"] else ""
+        lines.append(f"| {i} | {v['titulo'][:50]}{novo} | {v['score']} | {v['empresa'][:20]} | {v['cidade'][:20]} | [ver]({v['url']}) |")
+
+    lines += ["", "### Detalhes (Top)", ""]
+    for i, v in enumerate(top, 1):
+        novo = " 🆕 NOVA" if v["nova"] else ""
+        mot = " • ".join(v["motivos"]) or "—"
+        lines += [f"#### {i}. {v['titulo']}{novo}",
+                  f"- **Score:** {v['score']}/100", f"- **Empresa:** {v['empresa']}",
+                  f"- **Cidade:** {v['cidade']}", f"- **Fonte:** {v['fonte']}",
+                  f"- **Motivos:** {mot}", f"- **Link:** {v['url']}", ""]
+
+    if mid:
+        lines += ["## 🟡 Matches médios (score 40-59)", "",
+                  "| # | Vaga | Score | Empresa | Link |", "|---|---|---|---|---|"]
+        for i, v in enumerate(mid, 1):
+            lines.append(f"| {i} | {v['titulo'][:50]} | {v['score']} | {v['empresa'][:20]} | [ver]({v['url']}) |")
+
+    lines += ["", "---", f"> Total: {len(vagas)} · Novas: {sum(v['nova'] for v in vagas)} · Top: {len(top)} · Médias: {len(mid)}",
+              "> Para rodar: `python vagas_agent.py --email`"]
+
+    return "\n".join(lines)
+
+
+# ---------- FUNÇÕES LEGADAS (candidaturas, entrevista, etc.) ----------
+import json as _json
+from pathlib import Path as _Path
+
+_VAULT = _Path(os.environ.get("VAULT_PATH", r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI"))
+_CAND_FILE = _VAULT / "candidaturas.json"
+
 def load_applications():
-    path = os.path.join(CONFIG["vault_path"], CONFIG["applications_file"])
-    if os.path.exists(path):
+    if _CAND_FILE.exists():
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f).get("candidaturas", [])
-        except (json.JSONDecodeError, IOError):
+            return _json.loads(_CAND_FILE.read_text(encoding="utf-8")).get("candidaturas", [])
+        except Exception:
             return []
     return []
 
 def save_applications(apps):
-    path = os.path.join(CONFIG["vault_path"], CONFIG["applications_file"])
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({"candidaturas": apps}, f, ensure_ascii=False, indent=2)
+    _CAND_FILE.write_text(_json.dumps({"candidaturas": apps}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def find_application(title):
     apps = load_applications()
@@ -404,6 +342,15 @@ def find_application(title):
         if title_lower in app["vaga"].lower() or app["vaga"].lower() in title_lower:
             return app
     return None
+
+APPLICATION_STATUSES = {
+    "nao_candidatado": {"label": "Não candidatado", "icon": "⬜"},
+    "candidatado": {"label": "Candidatado", "icon": "🟦"},
+    "em_analise": {"label": "Em análise", "icon": "🟨"},
+    "entrevista": {"label": "Entrevista", "icon": "🟩"},
+    "rejeitado": {"label": "Não selecionado", "icon": "🔴"},
+    "aprovado": {"label": "Aprovado!", "icon": "🟢"},
+}
 
 def track_application(title, status="candidatado", notes="", link="", score=0, empresa="", proximo_passo=""):
     apps = load_applications()
@@ -423,12 +370,40 @@ def track_application(title, status="candidatado", notes="", link="", score=0, e
             "data_candidatura": datetime.now().strftime("%Y-%m-%d"),
             "data_atualizacao": datetime.now().isoformat(),
             "notas": notes or "", "proximo_passo": proximo_passo or "",
-            "prazo": "", "salario": "",
         }
         apps.append(new_app)
         print(f"[OK] Registrada: {title} → {APPLICATION_STATUSES[status]['label']}")
     save_applications(apps)
-    return existing or apps[-1]
+
+def get_application_stats():
+    apps = load_applications()
+    stats = {s: 0 for s in APPLICATION_STATUSES}
+    for app in apps:
+        st = app.get("status", "nao_candidatado")
+        if st in stats: stats[st] += 1
+    stats["total"] = len(apps)
+    responded = sum(stats.get(s, 0) for s in ["em_analise", "entrevista", "rejeitado", "aprovado"])
+    stats["taxa_resposta"] = round((responded / stats["total"] * 100), 1) if stats["total"] > 0 else 0
+    stats["taxa_entrevista"] = round((stats.get("entrevista", 0) + stats.get("aprovado", 0)) / stats["total"] * 100, 1) if stats["total"] > 0 else 0
+    return stats
+
+def list_applications():
+    apps = load_applications()
+    if not apps:
+        print("Nenhuma candidatura registrada.")
+        return
+    print("\n" + "=" * 70)
+    print("  CANDIDATURAS")
+    print("=" * 70)
+    for i, app in enumerate(apps, 1):
+        st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
+        print(f"\n  {i}. {st['icon']} {app['vaga']}")
+        print(f"     Empresa: {app.get('empresa', 'N/A')} | Status: {st['label']} | Data: {app.get('data_candidatura', 'N/A')}")
+        if app.get("notas"): print(f"     Notas: {app['notas']}")
+        if app.get("link"): print(f"     Link: {app['link']}")
+    print("\n" + "=" * 70)
+    stats = get_application_stats()
+    print(f"  Total: {stats['total']} | Resposta: {stats['taxa_resposta']}% | Entrevista: {stats['taxa_entrevista']}%")
 
 def get_followup_reminders():
     apps = load_applications()
@@ -439,823 +414,214 @@ def get_followup_reminders():
             try:
                 data = datetime.fromisoformat(app.get("data_candidatura", app.get("data_atualizacao", "")))
                 days = (now - data).days
-                if days >= CONFIG["followup_days"]:
+                if days >= 7:
                     reminders.append((app, days))
             except (ValueError, TypeError):
                 pass
     return reminders
 
-def get_application_stats():
-    apps = load_applications()
-    stats = {s: 0 for s in APPLICATION_STATUSES}
-    for app in apps:
-        st = app.get("status", "nao_candidatado")
-        if st in stats: stats[st] += 1
-    stats["total"] = len(apps)
-    # Taxa de resposta
-    responded = stats.get("em_analise", 0) + stats.get("entrevista", 0) + stats.get("rejeitado", 0) + stats.get("aprovado", 0)
-    stats["taxa_resposta"] = round((responded / stats["total"] * 100), 1) if stats["total"] > 0 else 0
-    stats["taxa_entrevista"] = round((stats.get("entrevista", 0) + stats.get("aprovado", 0)) / stats["total"] * 100, 1) if stats["total"] > 0 else 0
-    return stats
-
-def list_applications():
-    apps = load_applications()
-    if not apps:
-        print("Nenhuma candidatura registrada.")
-        print('Use: python vagas_agent.py --candidatura "Nome da vaga" --status candidatado')
-        return
-    print("\n" + "=" * 70)
-    print("  CANDIDATURAS — Lucas Barbosa Pedro")
-    print("=" * 70)
-    for i, app in enumerate(apps, 1):
-        st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
-        print(f"\n  {i}. {st['icon']} {app['vaga']}")
-        print(f"     Empresa: {app.get('empresa', 'N/A')}")
-        print(f"     Status: {st['label']}  |  Data: {app.get('data_candidatura', 'N/A')}")
-        if app.get("notas"): print(f"     Notas: {app['notas']}")
-        if app.get("link"): print(f"     Link: {app['link']}")
-        if app.get("proximo_passo"): print(f"     Próximo: {app['proximo_passo']}")
-    print("\n" + "=" * 70)
-    stats = get_application_stats()
-    print(f"\n  📊 Total: {stats['total']} | Resposta: {stats['taxa_resposta']}% | Entrevista: {stats['taxa_entrevista']}%")
-    for st_key, st_info in APPLICATION_STATUSES.items():
-        if stats[st_key] > 0:
-            print(f"     {st_info['icon']} {st_info['label']}: {stats[st_key]}")
-    print()
-
-# ============================================================
-# SALÁRIOS
-# ============================================================
-def load_salaries():
-    path = os.path.join(CONFIG["vault_path"], CONFIG["salaries_file"])
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f).get("salarios", [])
-        except (json.JSONDecodeError, IOError):
-            return []
-    return []
-
-def save_salaries(sals):
-    path = os.path.join(CONFIG["vault_path"], CONFIG["salaries_file"])
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({"salarios": sals}, f, ensure_ascii=False, indent=2)
-
-def extract_salary(text):
-    """Extrai faixa salarial de um texto."""
-    patterns = [
-        r'R\$\s*([\d.,]+)\s*(?:a|à|-|até)\s*R\$\s*([\d.,]+)',
-        r'R\$\s*([\d.,]+)',
-        r'salário[:\s]*R\$\s*([\d.,]+)',
-        r'bolsa[:\s]*R\$\s*([\d.,]+)',
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            groups = m.groups()
-            if len(groups) == 2:
-                return (groups[0], groups[1])
-            return (groups[0], groups[0])
-    return None
-
-# ============================================================
-# PREP DE ENTREVISTA
-# ============================================================
-INTERVIEW_QUESTIONS = {
-    "geral": [
-        "Fale sobre você e sua trajetória.",
-        "Por que você quer trabalhar nesta empresa?",
-        "Quais são seus pontos fortes e fracos?",
-        "Onde você se vê em 5 anos?",
-        "Por que escolheu a área de TI?",
-    ],
-    "tecnico": [
-        "Explique a diferença entre frontend e backend.",
-        "O que é um banco de dados relacional? Cite exemplos.",
-        "Como funciona o Git e para que serve?",
-        "O que é uma API REST?",
-        "Explique o que é SQL e dê exemplos de comandos (SELECT, INSERT, UPDATE, DELETE).",
-        "O que é Flask e como funciona?",
-        "Como você resolveria um problema de rede (IP, DNS)?",
-        "O que é versionamento de código?",
-    ],
-    "comportamental": [
-        "Conte sobre um desafio que você superou.",
-        "Como você lida com prazos apertados?",
-        "Descreva uma situação de trabalho em equipe.",
-        "Como você prioriza tarefas?",
-        "O que você faz quando não sabe resolver um problema?",
-    ],
-    "projetos": [
-        "Fale sobre o FinanceTracker. Como funciona?",
-        "Quais tecnologias você usou no BrutalFit Expo?",
-        "Como você organizou o banco de dados do FinanceTracker?",
-        "Por que usou Blueprints no Flask?",
-        "Como você garante a segurança das credenciais do banco?",
-    ],
-}
-
 def generate_interview_prep(vaga_title):
-    """Gera preparação de entrevista para uma vaga."""
-    app = find_application(vaga_title)
+    app = None
+    for a in load_applications():
+        if vaga_title.lower() in a["vaga"].lower():
+            app = a
+            break
     vaga = app["vaga"] if app else vaga_title
     empresa = app.get("empresa", "N/A") if app else "N/A"
-
-    lines = [
-        f"# 🎯 Prep de Entrevista — {vaga}",
-        f"> Empresa: {empresa} | Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-        "",
-        "## 📌 Sobre a vaga",
-        f"- **Vaga:** {vaga}",
-        f"- **Empresa:** {empresa}",
-        f"- **Score:** {app.get('score', 'N/A') if app else 'N/A'}/100" if app else "",
-        "",
-        "## 💬 Perguntas gerais",
-    ]
-    for q in INTERVIEW_QUESTIONS["geral"]:
-        lines.append(f"- {q}")
-
-    lines += ["", "## 🔧 Perguntas técnicas"]
-    for q in INTERVIEW_QUESTIONS["tecnico"]:
-        lines.append(f"- {q}")
-
-    lines += ["", "## 🧠 Perguntas comportamentais"]
-    for q in INTERVIEW_QUESTIONS["comportamental"]:
-        lines.append(f"- {q}")
-
-    lines += ["", "## 🚀 Perguntas sobre seus projetos"]
-    for q in INTERVIEW_QUESTIONS["projetos"]:
-        lines.append(f"- {q}")
-
-    lines += [
-        "",
-        "## 📝 Dicas para a entrevista",
-        "- Pesquise sobre a empresa antes da entrevista",
-        "- Prepare exemplos concretos (use a técnica STAR: Situação, Tarefa, Ação, Resultado)",
-        "- Tenha perguntas para fazer ao entrevistador",
-        "- Chegue 10 min antes (se presencial) ou teste a câmera (se online)",
-        "- Vista-se adequadamente para a empresa",
-        "",
-        "## 🎤 Suas perguntas para o entrevistador",
-        "- Quais são as principais atividades do dia a dia?",
-        "- Existe possibilidade de efetivação após o estágio?",
-        "- Como funciona o acompanhamento do estagiário?",
-        "- Quais tecnologias a equipe utiliza?",
-        "",
-        "---",
-        "> Gerado pelo Agente Vagas TI v4.0",
-    ]
-
+    lines = [f"# Prep de Entrevista — {vaga}", f"> Empresa: {empresa}", "",
+             "## Perguntas gerais",
+             "- Fale sobre você.", "- Por que esta empresa?", "- Pontos fortes/fracos?",
+             "- Onde se vê em 5 anos?", "- Por que TI?",
+             "", "## Perguntas técnicas",
+             "- Diferença frontend/backend?", "- O que é BD relacional?",
+             "- Como funciona Git?", "- O que é API REST?", "- SQL: SELECT, INSERT, UPDATE, DELETE?",
+             "- O que é Flask?", "- Como resolver problema de rede?",
+             "", "## Perguntas comportamentais",
+             "- Desafio superado?", "- Prazos apertados?", "- Trabalho em equipe?",
+             "- Priorização de tarefas?", "- O que faz quando não sabe?",
+             "", "## Dicas", "- Pesquise a empresa", "- Use técnica STAR",
+             "- Tenha perguntas para o entrevistador", "- Chegue 10 min antes",
+             "", "---", "> Gerado pelo Agente Vagas TI v5.0"]
     content = "\n".join(lines)
-    filename = f"Entrevista - {vaga[:40]}.md"
-    filepath = os.path.join(CONFIG["vault_path"], filename)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(content)
+    filepath = _VAULT / f"Entrevista - {vaga[:40]}.md"
+    filepath.write_text(content, encoding="utf-8")
     print(f"[OK] Prep de entrevista salvo em: {filepath}")
     print(content)
     return content
 
-# ============================================================
-# CURRÍCULO PERSONALIZADO
-# ============================================================
 def generate_tailored_resume(vaga_title):
-    """Gera sugestões de currículo personalizado para uma vaga."""
-    app = find_application(vaga_title)
+    app = None
+    for a in load_applications():
+        if vaga_title.lower() in a["vaga"].lower():
+            app = a
+            break
     vaga = app["vaga"] if app else vaga_title
     empresa = app.get("empresa", "N/A") if app else "N/A"
     score = app.get("score", 0) if app else 0
-
-    # Identifica skills relevantes
-    text = vaga.lower()
-    relevant_skills = []
-    for skill in PROFILE["skills"]["strong"] + PROFILE["skills"]["medium"] + PROFILE["skills"]["basic"]:
-        if skill in text:
-            relevant_skills.append(skill)
-
-    lines = [
-        f"# 📄 Currículo Personalizado — {vaga}",
-        f"> Empresa: {empresa} | Score: {score}/100 | Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-        "",
-        "## 🎯 Skills destacadas para esta vaga",
-    ]
-    if relevant_skills:
-        for s in relevant_skills:
-            lines.append(f"- ✅ {s.title()}")
-    else:
-        lines.append("- (Nenhuma skill específica detectada — destaque Python, SQL e Git)")
-
-    lines += [
-        "",
-        "## 📝 Sugestões de adaptação do currículo",
-        "",
-        "### Objetivo",
-        f"> Jovem Aprendiz / Estágio em TI — {vaga} na {empresa}",
-        "",
-        "### Resumo profissional (adaptado)",
-        f"> Estudante do 2º semestre de ADS (UNIFECAF), com experiência em backoffice e atendimento. "
-        f"Desenvolve projetos próprios com Python, Flask e MySQL. Busca oportunidade de estágio/JA em {vaga.lower()} "
-        f"na {empresa}, aplicando conhecimentos em " + ", ".join(s.title() for s in relevant_skills[:5] if relevant_skills) + ".",
-        "",
-        "### Projetos (destacar)",
-    ]
-    for proj in PROFILE["projects"]:
-        lines.append(f"- **{proj['name']}** ({proj['tech']}): {proj['desc']}")
-
-    lines += [
-        "",
-        "### Experiência (adaptar descrição)",
-        f"- **Agente de Relacionamento I (Backoffice)** — Sercom/Claro (jan/2026-atual)",
-        "  - Atendimento de solicitações comerciais e operacionais",
-        "  - Cumprimento de metas e SLA",
-        "  - " + ("Experiência com sistemas e processos — relevante para " + vaga if "suporte" in text or "atendimento" in text else "Experiência em atendimento ao cliente"),
-        "",
-        "### Dicas para esta candidatura",
-        "- Destaque os projetos do GitHub (FinanceTracker e BrutalFit)",
-        "- Mencione a medalha de ouro na CUCO/USP como diferencial",
-        "- Enfatize vontade de aprender e crescimento na área",
-    ]
-    if "python" in text:
-        lines.append("- Destaque sua experiência prática com Python e Flask")
-    if "sql" in text or "dados" in text or "banco" in text:
-        lines.append("- Destaque seu conhecimento em SQL e modelagem de banco de dados")
-    if "suporte" in text or "help desk" in text:
-        lines.append("- Destaque sua experiência com atendimento e backoffice")
-    if "remoto" in text:
-        lines.append("- Mencione disponibilidade para trabalho remoto")
-
-    lines += [
-        "",
-        "### 🤖 Prompt para IA (copie e cole no ChatGPT/Claude)",
-        "```",
-        f"Adapte meu currículo para a vaga de {vaga} na {empresa}.",
-        f"Meu perfil: estudante de ADS 2º semestre, Python/SQL/Flask/MySQL, ",
-        f"projetos FinanceTracker e BrutalFit no GitHub, experiência em backoffice Sercom/Claro.",
-        f"Diferenciais: medalhista CUCO/USP, OBMEP, OMASP.",
-        f"Destaque as skills mais relevantes para esta vaga e sugira melhorias.",
-        "```",
-        "",
-        "---",
-        "> Gerado pelo Agente Vagas TI v4.0",
-    ]
-
+    lines = [f"# Currículo Personalizado — {vaga}",
+             f"> Empresa: {empresa} | Score: {score}/100", "",
+             "## Skills destacadas", "- Python, SQL, Flask, MySQL, Git, HTML/CSS",
+             "", "## Sugestões", "- Destaque projetos do GitHub (FinanceTracker, BrutalFit)",
+             "- Mencione medalha CUCO/USP", "- Enfatize vontade de aprender",
+             "", "## Prompt para IA",
+             f"Adapte meu currículo para a vaga de {vaga} na {empresa}.",
+             "Meu perfil: estudante de ADS 2º sem, Python/SQL/Flask/MySQL,",
+             "projetos FinanceTracker e BrutalFit no GitHub, experiência em backoffice Sercom/Claro.",
+             "Diferenciais: medalhista CUCO/USP, OBMEP, OMASP.",
+             "", "---", "> Gerado pelo Agente Vagas TI v5.0"]
     content = "\n".join(lines)
-    filename = f"Curriculo - {vaga[:40]}.md"
-    filepath = os.path.join(CONFIG["vault_path"], filename)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(content)
+    filepath = _VAULT / f"Curriculo - {vaga[:40]}.md"
+    filepath.write_text(content, encoding="utf-8")
     print(f"[OK] Currículo personalizado salvo em: {filepath}")
     print(content)
     return content
 
-# ============================================================
-# TELEGRAM
-# ============================================================
-def send_telegram(message):
-    """Envia mensagem via Telegram Bot."""
-    if not CONFIG["telegram_enabled"]:
-        print("[INFO] Telegram desativado. Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.")
-        return
-    token = CONFIG["telegram_bot_token"]
-    chat_id = CONFIG["telegram_chat_id"]
+def generate_dashboard():
+    content = '''filters:
+  and:
+    - file.hasTag("vaga")
+formulas:
+  score_label: 'if(score >= 60, "Top", if(score >= 40, "Medio", "Baixo"))'
+views:
+  - type: table
+    name: "Todas as Vagas"
+    sort:
+      - property: score
+        direction: DESC
+  - type: table
+    name: "Top Matches"
+    filters:
+      and:
+        - score >= 60
+'''
+    filepath = _VAULT / "Vagas Dashboard.base"
+    filepath.write_text(content, encoding="utf-8")
+    print(f"[OK] Dashboard salvo em: {filepath}")
+
+def show_analytics():
+    apps = load_applications()
+    print("\n" + "=" * 60)
+    print("  ANALYTICS")
+    print("=" * 60)
+    stats = get_application_stats()
+    print(f"  Candidaturas: {stats['total']}")
+    print(f"  Taxa de resposta: {stats['taxa_resposta']}%")
+    print(f"  Taxa de entrevista: {stats['taxa_entrevista']}%")
+    for st_key, st_info in APPLICATION_STATUSES.items():
+        if stats.get(st_key, 0) > 0:
+            print(f"  {st_info['icon']} {st_info['label']}: {stats[st_key]}")
+    print("=" * 60)
+
+def send_telegram(msg):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:
-        print("[AVISO] Telegram não configurado.")
+        print("[INFO] Telegram nao configurado.")
         return
     try:
         import urllib.request
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = json.dumps({"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}).encode()
+        data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10)
-        print("[OK] Mensagem enviada via Telegram!")
+        print("[OK] Telegram enviado!")
     except Exception as e:
-        print(f"[ERRO] Falha ao enviar Telegram: {e}")
+        print(f"[ERRO] Telegram: {e}")
 
-# ============================================================
-# EMAIL
-# ============================================================
-def send_email(content: str):
-    if not CONFIG["email_enabled"]:
-        print("[INFO] Email desativado.")
-        return
-    try:
-        # Extrai dados do conteúdo para montar email organizado
-        jobs = []
-        # Tenta extrair vagas do conteúdo markdown
-        for line in content.split("\n"):
-            if "|" in line and "ver]" in line:
-                parts = [p.strip() for p in line.split("|")]
-                if len(parts) >= 5:
-                    try:
-                        score = int(parts[2].strip()) if parts[2].strip().isdigit() else 0
-                        jobs.append({"title": parts[1].strip(), "score": score, "link": parts[-1].strip()})
-                    except (ValueError, IndexError):
-                        pass
 
-        msg = MIMEMultipart("alternative")
-        msg["From"] = CONFIG["email_from"]
-        msg["To"] = CONFIG["email_to"]
-        msg["Subject"] = f"Vagas TI - {datetime.now().strftime('%d/%m/%Y')} - {len(jobs)} vagas encontradas"
+# ---------- SCORE WRAPPER (para Streamlit) ----------
+def score_job(vaga):
+    """Wrapper: calcula score de uma vaga (dict com titulo, descricao, etc.)"""
+    if isinstance(vaga, dict) and "titulo" in vaga:
+        return calcula_score(vaga)["score"]
+    # Formato antigo (title, description)
+    v = {"titulo": vaga.get("title", ""), "descricao": vaga.get("description", ""),
+         "cidade": "", "url": vaga.get("link", ""), "tipo": "", "remoto": False,
+         "empresa": "", "data": "", "fonte": vaga.get("source", "")}
+    return calcula_score(v)["score"]
 
-        # Versão texto simples
-        text_version = content
+def score_job_generic(job, skills):
+    """Scoring generico baseado em skills do curriculo."""
+    text = (job.get("title", job.get("titulo", "")) + " " + job.get("description", job.get("descricao", ""))).lower()
+    score = 0
+    for skill in skills:
+        if skill.lower() in text:
+            score += 8
+    score = min(score, 40)
+    ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas"]
+    score += min(sum(1 for kw in ti_kw if kw in text) * 4, 20)
+    level_kw = ["jovem aprendiz", "estágio", "estagiário", "aprendiz", "trainee", "estagio"]
+    if any(kw in text for kw in level_kw):
+        score += 20
+    if "são paulo" in text or "sao paulo" in text or "sp" in text:
+        score += 10
+    elif "remoto" in text or "híbrido" in text:
+        score += 8
+    other = ["rio de janeiro", "curitiba", "porto alegre", "belo horizonte"]
+    if any(c in text for c in other):
+        score -= 30
+    return max(0, min(100, score))
 
-        # Versão HTML (organizada e bonita)
-        top_jobs = sorted(jobs, key=lambda j: j["score"], reverse=True)[:5]
+def search_jobs(skills, area=""):
+    """Busca vagas (usada pelo Streamlit)."""
+    # Busca via Gupy e Adzuna
+    queries = [area] if area and area != "Todas as vagas de TI" else TERMOS_BUSCA[:6]
+    for skill in skills[:3]:
+        queries.append(f"estágio {skill}")
+    jobs = []
+    seen = set()
+    for q in queries:
+        for v in buscar_gupy(q):
+            if valida(v) and v["url"] not in seen:
+                seen.add(v["url"])
+                v = calcula_score(v)
+                jobs.append({"title": v["titulo"], "link": v["url"],
+                             "description": v["descricao"][:200], "source": v["fonte"],
+                             "score": v["score"], "empresa": v["empresa"]})
+        if ADZUNA_ID:
+            for v in buscar_adzuna(q):
+                if valida(v) and v["url"] not in seen:
+                    seen.add(v["url"])
+                    v = calcula_score(v)
+                    jobs.append({"title": v["titulo"], "link": v["url"],
+                                 "description": v["descricao"][:200], "source": v["fonte"],
+                                 "score": v["score"], "empresa": v["empresa"]})
+    jobs.sort(key=lambda j: j["score"], reverse=True)
+    return jobs
 
-        html_jobs = ""
-        for i, job in enumerate(top_jobs, 1):
-            score = job["score"]
-            color = "#22c55e" if score >= 70 else ("#eab308" if score >= 40 else "#ef4444")
-            html_jobs += f"""
-            <div style="background:#f8f9fa;border-radius:10px;padding:14px;margin:8px 0;border-left:4px solid {color};">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="font-weight:600;font-size:15px;color:#333;">{i}. {job['title'][:60]}</span>
-                    <span style="background:{color};color:white;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;">{score}/100</span>
-                </div>
-                <a href="{job['link']}" style="color:#667eea;text-decoration:none;font-size:13px;">Ver vaga →</a>
-            </div>"""
 
-        html_version = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin:0; padding:0; background:#f0f2f5; }}
-    .container {{ max-width:600px; margin:0 auto; background:white; border-radius:16px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.1); }}
-    .header {{ background:linear-gradient(135deg,#667eea,#764ba2); padding:24px; color:white; text-align:center; }}
-    .header h1 {{ margin:0; font-size:22px; }}
-    .header p {{ margin:6px 0 0 0; opacity:0.9; font-size:13px; }}
-    .content {{ padding:20px; }}
-    .section {{ margin:16px 0; }}
-    .section-title {{ font-size:16px; font-weight:600; color:#333; margin-bottom:8px; border-bottom:2px solid #667eea; padding-bottom:4px; }}
-    .stats {{ display:flex; gap:12px; margin:12px 0; }}
-    .stat {{ flex:1; background:#f8f9fa; border-radius:10px; padding:12px; text-align:center; }}
-    .stat-num {{ font-size:24px; font-weight:700; color:#667eea; }}
-    .stat-label {{ font-size:11px; color:#666; }}
-    .footer {{ text-align:center; color:#999; font-size:11px; padding:16px; border-top:1px solid #eee; }}
-    .cta {{ display:block; text-align:center; background:linear-gradient(135deg,#667eea,#764ba2); color:white; padding:12px; border-radius:10px; text-decoration:none; font-weight:600; margin:16px 0; }}
-</style>
-</head>
-<body>
-<div class="container">
-    <div class="header">
-        <h1>Vagas TI - Lucas</h1>
-        <p>{datetime.now().strftime('%d/%m/%Y %H:%M')} | {len(jobs)} vagas encontradas</p>
-    </div>
-    <div class="content">
-        <div class="stats">
-            <div class="stat">
-                <div class="stat-num">{len(jobs)}</div>
-                <div class="stat-label">Total</div>
-            </div>
-            <div class="stat">
-                <div class="stat-num">{len([j for j in jobs if j['score'] >= 70])}</div>
-                <div class="stat-label">Top (70+)</div>
-            </div>
-            <div class="stat">
-                <div class="stat-num">{len([j for j in jobs if 40 <= j['score'] < 70])}</div>
-                <div class="stat-label">Medias</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <div class="section-title">Top 5 Vagas</div>
-            {html_jobs if html_jobs else '<p style="color:#999;">Nenhuma vaga encontrada.</p>'}
-        </div>
-
-        <a href="https://github.com/lucass1108/agente-vagas-ti" class="cta">Ver todas as vagas no GitHub</a>
-
-        <div class="footer">
-            Agente Vagas TI v4.0 - Gerado automaticamente<br>
-            Para mais detalhes, veja a nota no Obsidian.
-        </div>
-    </div>
-</div>
-</body>
-</html>"""
-
-        msg.attach(MIMEText(text_version, "plain"))
-        msg.attach(MIMEText(html_version, "html"))
-
-        with smtplib.SMTP(CONFIG["smtp_server"], CONFIG["smtp_port"]) as server:
-            server.starttls()
-            server.login(CONFIG["email_from"], CONFIG["email_password"])
-            server.send_message(msg)
-        print("[OK] Email enviado com sucesso! (versao organizada)")
-    except Exception as e:
-        print(f"[ERRO] Falha ao enviar email: {e}")
-
-# ============================================================
-# NOTIFICAÇÃO WINDOWS (TOAST)
-# ============================================================
-def send_toast(title, message):
-    if not CONFIG.get("toast_enabled", False):
-        return
-    try:
-        ps_script = f'''
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-$textNodes = $template.GetElementsByTagName("text")
-$textNodes.Item(0).AppendChild($template.CreateTextNode("{title}")) | Out-Null
-$textNodes.Item(1).AppendChild($template.CreateTextNode("{message}")) | Out-Null
-$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Agente Vagas TI").Show($toast)
-'''
-        subprocess.run(["powershell", "-Command", ps_script], capture_output=True, timeout=10)
-    except Exception as e:
-        print(f"[AVISO] Toast não enviado: {e}")
-
-# ============================================================
-# OBSIDIAN BASE DASHBOARD
-# ============================================================
-def generate_dashboard():
-    """Gera um arquivo .base para dashboard no Obsidian."""
-    content = '''filters:
-  and:
-    - file.hasTag("vaga")
-    - file.inFolder("Vagas")
-
-formulas:
-  score_label: 'if(score >= 70, "🟢 Top", if(score >= 40, "🟡 Médio", "🔴 Baixo"))'
-  dias_sem_resposta: '(now() - file.ctime).days'
-
-properties:
-  score:
-    displayName: Score
-  status:
-    displayName: Status
-  fonte:
-    displayName: Fonte
-  empresa:
-    displayName: Empresa
-
-views:
-  - type: table
-    name: "Todas as Vagas"
-    order:
-      - file.name
-      - score
-      - status
-      - fonte
-      - empresa
-    sort:
-      - property: score
-        direction: DESC
-
-  - type: table
-    name: "Top Matches (≥70)"
-    filters:
-      and:
-        - score >= 70
-    sort:
-      - property: score
-        direction: DESC
-
-  - type: table
-    name: "Candidaturas Ativas"
-    filters:
-      and:
-        - status != "nao_candidatado"
-        - status != "rejeitado"
-    sort:
-      - property: file.ctime
-        direction: DESC
-
-  - type: cards
-    name: "Cards por Score"
-    order:
-      - file.name
-      - score
-    sort:
-      - property: score
-        direction: DESC
-
-  - type: table
-    name: "Follow-up (7+ dias)"
-    filters:
-      and:
-        - status == "candidatado"
-        - '(now() - file.ctime).days >= 7'
-    sort:
-      - property: file.ctime
-        direction: ASC
-'''
-    filepath = os.path.join(CONFIG["vault_path"], "Vagas Dashboard.base")
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(content)
-    print(f"[OK] Dashboard salvo em: {filepath}")
-    print("Abra no Obsidian para visualizar as vagas em tabela/cards!")
-
-# ============================================================
-# GERAÇÃO DA NOTA (completa)
-# ============================================================
-def generate_note(jobs, new_jobs):
-    now = datetime.now().strftime("%d/%m/%Y %H:%M")
-    scored = sorted(jobs, key=score_job, reverse=True)
-    history = load_history()
-    apps = load_applications()
-    reminders = get_followup_reminders()
-
-    top = [j for j in scored if score_job(j) >= 70]
-    mid = [j for j in scored if 40 <= score_job(j) < 70]
-    low = [j for j in scored if score_job(j) < 40]
-    new_set = {j["title"].lower().strip() for j in new_jobs}
-
-    # Salários
-    salaries = []
-    for job in jobs:
-        sal = extract_salary(job.get("description", "") + " " + job.get("title", ""))
-        if sal:
-            salaries.append((job["title"], sal))
-
-    lines = [
-        "---",
-        "tags: [vagas, ti, estagio, jovem-aprendiz, candidaturas]",
-        f"updated: {datetime.now().strftime('%Y-%m-%d')}",
-        f"total_vagas: {len(jobs)}",
-        f"novas: {len(new_jobs)}",
-        f"total_candidaturas: {len(apps)}",
-        f"followups_pendentes: {len(reminders)}",
-        "---",
-        "",
-        "# Vagas TI — Lucas Barbosa Pedro",
-        f"> Relatório gerado em {now} · Agente v4.0 (completo)",
-        f"> Total: {len(jobs)} vagas · Novas: {len(new_jobs)} · Candidaturas: {len(apps)} · Follow-ups: {len(reminders)}",
-        "",
-    ]
-
-    # Follow-ups
-    if reminders:
-        lines += ["## ⏰ Lembretes de Follow-up", ""]
-        for app, days in reminders:
-            st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["candidatado"])
-            lines.append(f"- {st['icon']} **{app['vaga']}** — {days} dias sem resposta. Envie follow-up!")
-        lines.append("")
-
-    # Novas vagas
-    if new_jobs:
-        lines += [
-            "## 🆕 Novas desde a última execução",
-            "",
-            "| # | Vaga | Score | Fonte | Link |",
-            "|---|---|---|---|---|",
-        ]
-        for i, job in enumerate(sorted(new_jobs, key=score_job, reverse=True), 1):
-            s = score_job(job)
-            lines.append(f"| {i} | {job['title'][:60]} | {s} | {job.get('source','?')} | [ver]({job['link']}) |")
-        lines.append("")
-
-    # Top matches
-    lines += [
-        "## 🟢 Top Matches (score ≥ 70)",
-        "",
-        "| # | Vaga | Score | Fonte | Novo? | Link |",
-        "|---|---|---|---|---|---|",
-    ]
-    for i, job in enumerate(top, 1):
-        s = score_job(job)
-        is_new = "🆕" if job["title"].lower().strip() in new_set else ""
-        lines.append(f"| {i} | {job['title'][:60]} | {s} | {job.get('source','?')} | {is_new} | [ver]({job['link']}) |")
-
-    lines += ["", "### Detalhes (Top)", ""]
-    for i, job in enumerate(top, 1):
-        s = score_job(job)
-        is_new = " 🆕 NOVA" if job["title"].lower().strip() in new_set else ""
-        app = find_application(job["title"])
-        app_status = ""
-        if app:
-            st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
-            app_status = f"\n- **Candidatura:** {st['icon']} {st['label']} ({app.get('data_candidatura', 'N/A')})"
-        sal = extract_salary(job.get("description", "") + " " + job.get("title", ""))
-        sal_str = f"\n- **Salário:** R$ {sal[0]}" + (f" a R$ {sal[1]}" if sal and sal[0] != sal[1] else "") if sal else ""
-        lines += [
-            f"#### {i}. {job['title']}{is_new}",
-            f"- **Score:** {s}/100",
-            f"- **Fonte:** {job.get('source', '?')}",
-            f"- **Descrição:** {job['description'][:200]}",
-            f"- **Link:** {job['link']}{app_status}{sal_str}",
-            "",
-        ]
-
-    # Matches médios
-    lines += [
-        "## 🟡 Matches médios (score 40-69)",
-        "",
-        "| # | Vaga | Score | Fonte | Link |",
-        "|---|---|---|---|---|",
-    ]
-    for i, job in enumerate(mid, 1):
-        s = score_job(job)
-        lines.append(f"| {i} | {job['title'][:60]} | {s} | {job.get('source','?')} | [ver]({job['link']}) |")
-
-    if low:
-        lines += [
-            "",
-            "## 🔴 Baixa compatibilidade (score < 40)",
-            "",
-            "| # | Vaga | Score | Fonte | Link |",
-            "|---|---|---|---|---|",
-        ]
-        for i, job in enumerate(low, 1):
-            s = score_job(job)
-            lines.append(f"| {i} | {job['title'][:60]} | {s} | {job.get('source','?')} | [ver]({job['link']}) |")
-
-    # Candidaturas
-    lines += ["", "## 📋 Minhas Candidaturas", ""]
-    if apps:
-        lines += [
-            "| # | Vaga | Empresa | Status | Data | Score |",
-            "|---|---|---|---|---|---|",
-        ]
-        for i, app in enumerate(apps, 1):
-            st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
-            lines.append(
-                f"| {i} | {app['vaga'][:40]} | {app.get('empresa','N/A')[:20]} | "
-                f"{st['icon']} {st['label']} | {app.get('data_candidatura','N/A')} | {app.get('score',0)} |"
-            )
-        lines.append("")
-        lines += ["### Detalhes das Candidaturas", ""]
-        for i, app in enumerate(apps, 1):
-            st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
-            lines += [
-                f"#### {i}. {st['icon']} {app['vaga']}",
-                f"- **Empresa:** {app.get('empresa', 'N/A')}",
-                f"- **Status:** {st['label']}",
-                f"- **Data:** {app.get('data_candidatura', 'N/A')}",
-                f"- **Score:** {app.get('score', 0)}/100",
-            ]
-            if app.get("notas"): lines.append(f"- **Notas:** {app['notas']}")
-            if app.get("link"): lines.append(f"- **Link:** {app['link']}")
-            if app.get("proximo_passo"): lines.append(f"- **Próximo passo:** {app['proximo_passo']}")
-            lines.append("")
-        stats = get_application_stats()
-        lines += [
-            "### 📊 Estatísticas",
-            "",
-            f"- **Total:** {stats['total']}",
-            f"- **Taxa de resposta:** {stats['taxa_resposta']}%",
-            f"- **Taxa de entrevista:** {stats['taxa_entrevista']}%",
-        ]
-        for st_key, st_info in APPLICATION_STATUSES.items():
-            if stats[st_key] > 0:
-                lines.append(f"- {st_info['icon']} {st_info['label']}: {stats[st_key]}")
-        lines.append("")
-    else:
-        lines += ["> Nenhuma candidatura registrada.", "> Use: `python vagas_agent.py --candidatura \"Vaga\" --status candidatado`", ""]
-
-    # Salários
-    if salaries:
-        lines += ["## 💰 Faixas Salariais Encontradas", ""]
-        for title, (min_s, max_s) in salaries[:10]:
-            if min_s != max_s:
-                lines.append(f"- {title[:50]}: R$ {min_s} a R$ {max_s}")
-            else:
-                lines.append(f"- {title[:50]}: R$ {min_s}")
-        lines.append("")
-
-    lines += [
-        "---",
-        f"> Total vagas: {len(jobs)} · Novas: {len(new_jobs)} · Candidaturas: {len(apps)} · Follow-ups: {len(reminders)}",
-        f"> Última execução: {history.get('last_run', 'N/A')}",
-        "> Comandos: `--email` `--telegram` `--listar` `--stats` `--entrevista` `--curriculo` `--dashboard` `--analytics`",
-    ]
-
-    return "\n".join(lines)
-
-# ============================================================
-# ANALYTICS
-# ============================================================
-def show_analytics():
-    """Mostra analytics completo no console."""
-    apps = load_applications()
-    history = load_history()
-    stats = get_application_stats()
-
-    print("\n" + "=" * 60)
-    print("  📊 ANALYTICS — Agente Vagas TI")
-    print("=" * 60)
-
-    print(f"\n  📋 Candidaturas: {stats['total']}")
-    print(f"     Taxa de resposta: {stats['taxa_resposta']}%")
-    print(f"     Taxa de entrevista: {stats['taxa_entrevista']}%")
-    for st_key, st_info in APPLICATION_STATUSES.items():
-        if stats[st_key] > 0:
-            bar = "█" * stats[st_key]
-            print(f"     {st_info['icon']} {st_info['label']}: {stats[st_key]} {bar}")
-
-    # Timeline
-    if apps:
-        print(f"\n  📅 Timeline de candidaturas:")
-        sorted_apps = sorted(apps, key=lambda a: a.get("data_candidatura", ""))
-        for app in sorted_apps:
-            st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
-            print(f"     {app.get('data_candidatura', 'N/A')} — {st['icon']} {app['vaga'][:40]} ({app.get('empresa', 'N/A')})")
-
-    # Follow-ups pendentes
-    reminders = get_followup_reminders()
-    if reminders:
-        print(f"\n  ⏰ Follow-ups pendentes: {len(reminders)}")
-        for app, days in reminders:
-            print(f"     - {app['vaga']} ({days} dias)")
-
-    print(f"\n  📈 Histórico: {len(history.get('seen', []))} vagas vistas")
-    print(f"     Última execução: {history.get('last_run', 'N/A')}")
-    print("\n" + "=" * 60)
-
-# ============================================================
-# MAIN
-# ============================================================
-def run_agent(send_email_flag=False, send_telegram_flag=False):
-    print("=" * 50)
-    print("  Agente de Vagas TI - Lucas (v4.0)")
-    print("=" * 50)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Iniciando busca...")
-
-    history = load_history()
-
-    jobs = search_jobs()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {len(jobs)} vagas brutas encontradas.")
-
-    if not jobs:
-        print("[AVISO] Nenhuma vaga encontrada.")
-        return
-
-    jobs = deduplicate(jobs)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {len(jobs)} vagas após deduplicação.")
-
-    new_jobs = get_new_jobs(jobs, history)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {len(new_jobs)} vagas novas.")
-
-    reminders = get_followup_reminders()
-    if reminders:
-        print(f"\n  ⏰ {len(reminders)} candidatura(s) precisam de follow-up!")
-
-    note_content = generate_note(jobs, new_jobs)
-    note_path = os.path.join(CONFIG["vault_path"], CONFIG["note_name"])
-    with open(note_path, "w", encoding="utf-8") as f:
-        f.write(note_content)
-    print(f"[OK] Nota salva em: {note_path}")
-
-    save_history(jobs)
-
-    if send_email_flag:
-        send_email(note_content)
-
-    if send_telegram_flag or CONFIG["telegram_enabled"]:
-        # Envia resumo via Telegram
-        top_jobs = sorted(jobs, key=score_job, reverse=True)[:5]
-        tg_msg = f"📋 *Vagas TI — {datetime.now().strftime('%d/%m/%Y')}*\n\n"
-        tg_msg += f"🔍 {len(jobs)} vagas · 🆕 {len(new_jobs)} novas\n\n"
-        tg_msg += "*Top 5:*\n"
-        for i, job in enumerate(top_jobs, 1):
-            tg_msg += f"{i}. [{score_job(job)}] {job['title'][:50]}\n   {job['link']}\n"
-        if new_jobs:
-            tg_msg += f"\n🆕 {len(new_jobs)} vagas novas desde a última busca!"
-        if reminders:
-            tg_msg += f"\n⏰ {len(reminders)} follow-ups pendentes!"
-        send_telegram(tg_msg)
-
-    if new_jobs:
-        send_toast("Agente Vagas TI", f"{len(new_jobs)} novas vagas encontradas!")
-
-    scored = sorted(jobs, key=score_job, reverse=True)
-    print("\n--- TOP 5 VAGAS ---")
-    for job in scored[:5]:
-        print(f"  [{score_job(job):3d}] {job['title'][:60]}")
-    print()
-
+# ---------- MAIN ----------
 def main():
-    parser = argparse.ArgumentParser(description="Agente de Vagas TI - Lucas v4.0")
-    parser.add_argument("--email", action="store_true", help="Enviar por email")
-    parser.add_argument("--telegram", action="store_true", help="Enviar via Telegram")
-    parser.add_argument("--schedule", action="store_true", help="Modo agendado")
-    parser.add_argument("--candidatura", type=str, help="Registrar candidatura")
-    parser.add_argument("--status", type=str, default="candidatado", choices=list(APPLICATION_STATUSES.keys()))
-    parser.add_argument("--nota", type=str, default="", help="Notas")
-    parser.add_argument("--empresa", type=str, default="", help="Empresa")
-    parser.add_argument("--link", type=str, default="", help="Link")
-    parser.add_argument("--score", type=int, default=0, help="Score")
-    parser.add_argument("--proximo-passo", type=str, default="", dest="proximo_passo")
-    parser.add_argument("--listar", action="store_true", help="Listar candidaturas")
-    parser.add_argument("--stats", action="store_true", help="Estatísticas")
-    parser.add_argument("--entrevista", type=str, help="Prep de entrevista para vaga")
-    parser.add_argument("--curriculo", type=str, help="Currículo personalizado para vaga")
-    parser.add_argument("--dashboard", action="store_true", help="Gerar dashboard Obsidian Base")
-    parser.add_argument("--analytics", action="store_true", help="Analytics completo")
-    parser.add_argument("--salario", type=str, help="Registrar salário (formato: \"Vaga:R$1000-R$2000\")")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--email", action="store_true", help="busca e envia email")
+    ap.add_argument("--dry-run", action="store_true", help="gera preview.html sem enviar")
+    ap.add_argument("--telegram", action="store_true", help="envia via Telegram")
+    ap.add_argument("--schedule", action="store_true", help="modo agendado (diario)")
+    ap.add_argument("--candidatura", type=str, help="registrar candidatura")
+    ap.add_argument("--status", type=str, default="candidatado", choices=list(APPLICATION_STATUSES.keys()))
+    ap.add_argument("--nota", type=str, default="", help="notas")
+    ap.add_argument("--empresa", type=str, default="", help="empresa")
+    ap.add_argument("--link", type=str, default="", help="link da vaga")
+    ap.add_argument("--score", type=int, default=0, help="score")
+    ap.add_argument("--proximo-passo", type=str, default="", dest="proximo_passo")
+    ap.add_argument("--listar", action="store_true", help="listar candidaturas")
+    ap.add_argument("--stats", action="store_true", help="estatisticas")
+    ap.add_argument("--entrevista", type=str, help="prep de entrevista")
+    ap.add_argument("--curriculo", type=str, help="curriculo personalizado")
+    ap.add_argument("--dashboard", action="store_true", help="gerar dashboard")
+    ap.add_argument("--analytics", action="store_true", help="analytics completo")
+    args = ap.parse_args()
 
-    args = parser.parse_args()
-
+    # Comandos que nao precisam de busca
     if args.listar:
         list_applications()
         return
     if args.stats:
         stats = get_application_stats()
-        print(f"\n📊 Total: {stats['total']} | Resposta: {stats['taxa_resposta']}% | Entrevista: {stats['taxa_entrevista']}%")
+        print(f"\nTotal: {stats['total']} | Resposta: {stats['taxa_resposta']}% | Entrevista: {stats['taxa_entrevista']}%")
         for st_key, st_info in APPLICATION_STATUSES.items():
-            if stats[st_key] > 0:
-                print(f"   {st_info['icon']} {st_info['label']}: {stats[st_key]}")
+            if stats.get(st_key, 0) > 0:
+                print(f"  {st_info['icon']} {st_info['label']}: {stats[st_key]}")
         print()
         return
     if args.entrevista:
@@ -1270,39 +636,51 @@ def main():
     if args.analytics:
         show_analytics()
         return
-    if args.salario:
-        parts = args.salario.split(":")
-        if len(parts) == 2:
-            vaga = parts[0].strip()
-            sal_range = parts[1].strip()
-            m = re.search(r'R?\$?\s*([\d.,]+)\s*[-–aà]+\s*R?\$?\s*([\d.,]+)', sal_range)
-            if m:
-                sals = load_salaries()
-                sals.append({"vaga": vaga, "min": m.group(1), "max": m.group(2), "data": datetime.now().strftime("%Y-%m-%d")})
-                save_salaries(sals)
-                print(f"[OK] Salário registrado: {vaga} → R$ {m.group(1)} a R$ {m.group(2)}")
-            else:
-                print("[ERRO] Formato inválido. Use: --salario \"Vaga:R$1000-R$2000\"")
+    if args.candidatura:
+        track_application(title=args.candidatura, status=args.status, notes=args.nota,
+                          link=args.link, score=args.score, empresa=args.empresa,
+                          proximo_passo=args.proximo_passo)
+        print("Rode 'python vagas_agent.py' para atualizar.")
         return
 
-    if args.candidatura:
-        track_application(
-            title=args.candidatura, status=args.status, notes=args.nota,
-            link=args.link, score=args.score, empresa=args.empresa,
-            proximo_passo=args.proximo_passo,
-        )
-        print("\n[INFO] Rode 'python vagas_agent.py' para atualizar a nota completa.")
-        return
+    # Busca de vagas
+    print("=" * 50)
+    print("  Agente de Vagas TI v5.0")
+    print("=" * 50)
+    vagas, hist = coletar()
+    if not vagas:
+        sys.exit("ERRO: nenhuma vaga valida encontrada (verifique fontes/parsers).")
+
+    OUT_FILE.write_text(json.dumps(vagas, ensure_ascii=False, indent=2), encoding="utf-8")
+    salva_hist(hist | {v["url"] for v in vagas})
+
+    print(f"{len(vagas)} vagas | top: {sum(v['score'] >= TOP_MIN for v in vagas)}")
+    for v in vagas[:5]:
+        print(f"  {v['score']:>3} | {v['titulo']} | {v['empresa']}")
+
+    # Gera nota Obsidian
+    note_path = _VAULT / "Vagas TI - Lucas.md"
+    note_path.write_text(gera_nota_obsidian(vagas), encoding="utf-8")
+    print(f"Nota salva em: {note_path}")
+
+    html = monta_html(vagas)
+    assunto = f"Vagas TI - {datetime.now():%d/%m/%Y} - {len(vagas)} vagas"
+
+    if args.dry_run:
+        (BASE / "preview.html").write_text(html, encoding="utf-8")
+        print("preview.html gerado.")
+    elif args.email:
+        envia_email(html, assunto)
+    elif args.telegram:
+        send_telegram(f"Vagas TI: {len(vagas)} vagas encontradas. Top: {vagas[0]['titulo'] if vagas else 'N/A'}")
 
     if args.schedule:
-        print(f"Modo agendado: a cada {CONFIG['schedule_hours']}h")
-        run_agent(send_email_flag=True, send_telegram_flag=True)
-        schedule.every(CONFIG["schedule_hours"]).hours.do(lambda: run_agent(send_email_flag=True, send_telegram_flag=True))
+        print("Modo agendado: rodando a cada 24h")
+        import time as _time
         while True:
-            schedule.run_pending()
-            time.sleep(60)
-    else:
-        run_agent(send_email_flag=args.email, send_telegram_flag=args.telegram)
+            _time.sleep(86400)
+            main()
+
 
 if __name__ == "__main__":
     main()
