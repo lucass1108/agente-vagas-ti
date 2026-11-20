@@ -8,6 +8,28 @@ from html import escape
 from pathlib import Path
 
 import requests
+import base64
+import urllib.parse
+
+def decode_bing_url(url):
+    """Extrai URL direta de links de redirecionamento do Bing."""
+    if "bing.com/ck" not in url:
+        return url
+    try:
+        parsed = urllib.parse.urlparse(url)
+        params = urllib.parse.parse_qs(parsed.query)
+        if "u" in params:
+            u_val = params["u"][0]
+            # Remove prefixo 'a1' e decodifica base64
+            if u_val.startswith("a1"):
+                u_val = u_val[2:]
+            padded = u_val + "=" * (4 - len(u_val) % 4)
+            decoded = base64.b64decode(padded).decode("utf-8")
+            if decoded.startswith("http"):
+                return decoded
+    except Exception:
+        pass
+    return url
 
 BASE = Path(__file__).parent
 HIST_FILE = BASE / "historico_vagas.json"
@@ -62,7 +84,7 @@ def buscar_bing(termo):
             if not title_el:
                 continue
             title = title_el.get_text(strip=True)
-            link = title_el.get("href", "")
+            link = decode_bing_url(title_el.get("href", ""))
             snippet = snippet_el.get_text(strip=True) if snippet_el else ""
             combined = (title + " " + snippet).lower()
             ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas",
@@ -237,7 +259,7 @@ border-left:4px solid {c};border-radius:8px"><tr><td style="padding:12px 14px">
 <div style="font-size:12px;color:#475569;margin-bottom:6px">{mot}</div>
 <span style="background:{c};color:#fff;font-size:12px;font-weight:700;
 padding:3px 10px;border-radius:12px">{v["score"]}/100</span>
-&nbsp;<a href="{escape(v["url"])}" style="color:#4f46e5;font-size:13px;
+&nbsp;<a href="{v["url"]}" target="_blank" style="color:#4f46e5;font-size:13px;
 text-decoration:none;font-weight:600">Ver vaga →</a>
 </td></tr></table></td></tr>'''
 
@@ -269,7 +291,9 @@ def envia_email(html, assunto):
         sys.exit("EMAIL_PASSWORD não definido.")
     msg = MIMEMultipart("alternative")
     msg["Subject"], msg["From"], msg["To"] = assunto, EMAIL_USER, EMAIL_TO
-    msg.attach(MIMEText("Abra este email em um cliente com suporte a HTML.", "plain"))
+    # Versao texto simples com links clicaveis
+    text_body = f"Vagas TI - {datetime.now():%d/%m/%Y}\n\nAbra este email em um cliente com suporte a HTML para ver as vagas com links clicaveis."
+    msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
         s.login(EMAIL_USER, EMAIL_PASSWORD)
