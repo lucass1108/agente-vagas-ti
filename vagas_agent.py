@@ -47,29 +47,46 @@ TOP_MIN, MEDIA_MIN = 60, 40
 
 
 # ---------- FONTES ----------
-def buscar_gupy(termo):
+def buscar_bing(termo):
     vagas = []
     try:
-        r = requests.get(
-            "https://portal.api.gupy.io/api/job",
-            params={"jobName": termo, "limit": 50, "offset": 0},
-            headers=HEADERS, timeout=25,
-        )
+        from urllib.parse import quote_plus
+        from bs4 import BeautifulSoup
+        url = f"https://www.bing.com/search?q={quote_plus(termo + ' site:gupy.io OR site:vagas.com.br OR site:indeed.com.br')}"
+        r = requests.get(url, headers=HEADERS, timeout=25)
         r.raise_for_status()
-        for j in r.json().get("data", []):
+        soup = BeautifulSoup(r.text, "html.parser")
+        for result in soup.select("li.b_algo"):
+            title_el = result.select_one("h2 a")
+            snippet_el = result.select_one(".b_caption p")
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            link = title_el.get("href", "")
+            snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+            combined = (title + " " + snippet).lower()
+            ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas",
+                     "informática", "informatica", "help desk", "analista", "dev", "software",
+                     "python", "sql", "estágio", "estagio", "aprendiz", "trainee", "jovem aprendiz"]
+            if not any(kw in combined for kw in ti_kw):
+                continue
+            other = ["rio de janeiro", "curitiba", "porto alegre", "belo horizonte", "salvador",
+                     "fortaleza", "recife", "brasília", "manaus", "florianópolis"]
+            if any(c in combined for c in other):
+                continue
             vagas.append({
-                "titulo": (j.get("name") or "").strip(),
-                "empresa": (j.get("careerPageName") or "").strip(),
-                "cidade": ", ".join(x for x in [j.get("city"), j.get("state")] if x),
-                "url": j.get("jobUrl") or "",
-                "tipo": (j.get("type") or "").lower(),
-                "remoto": (j.get("workplaceType") or "").lower() == "remote",
-                "descricao": (j.get("description") or ""),
-                "data": j.get("publishedDate") or "",
-                "fonte": "Gupy",
+                "titulo": title,
+                "empresa": "",
+                "cidade": "São Paulo",
+                "url": link,
+                "tipo": "",
+                "remoto": "remoto" in combined or "home office" in combined,
+                "descricao": snippet,
+                "data": "",
+                "fonte": "Bing",
             })
     except Exception as e:
-        print(f"[aviso] Gupy '{termo}': {e}")
+        print(f"[aviso] Bing '{termo}': {e}")
     return vagas
 
 
@@ -169,7 +186,7 @@ def salva_hist(urls):
 def coletar():
     bruto = []
     for t in TERMOS_BUSCA:
-        bruto += buscar_gupy(t)
+        bruto += buscar_bing(t)
         bruto += buscar_adzuna(t)
     vistos, unicas = set(), []
     for v in bruto:
