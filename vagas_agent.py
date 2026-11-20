@@ -58,7 +58,7 @@ CONFIG = {
     "smtp_server": "smtp.gmail.com",
     "smtp_port": 587,
     "email_from": "lucasbarbosapedro1108@gmail.com",
-    "email_password": os.environ.get("EMAIL_PASSWORD", "afkg jkym lviw kvql"),
+    "email_password": os.environ.get("EMAIL_PASSWORD", "citk afua kbcg jxrf"),
     "email_to": "lucasbarbosapedro1108@gmail.com",
     "telegram_enabled": False,
     "telegram_bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
@@ -738,59 +738,98 @@ def send_email(content: str):
         print("[INFO] Email desativado.")
         return
     try:
-        # Gera versão mobile-friendly do email
-        scored_jobs = []
-        # Extrai top vagas do conteúdo (simplificado)
+        # Extrai dados do conteúdo para montar email organizado
+        jobs = []
+        # Tenta extrair vagas do conteúdo markdown
+        for line in content.split("\n"):
+            if "|" in line and "ver]" in line:
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) >= 5:
+                    try:
+                        score = int(parts[2].strip()) if parts[2].strip().isdigit() else 0
+                        jobs.append({"title": parts[1].strip(), "score": score, "link": parts[-1].strip()})
+                    except (ValueError, IndexError):
+                        pass
+
         msg = MIMEMultipart("alternative")
         msg["From"] = CONFIG["email_from"]
         msg["To"] = CONFIG["email_to"]
-        msg["Subject"] = f"📋 Vagas TI - {datetime.now().strftime('%d/%m/%Y')}"
+        msg["Subject"] = f"Vagas TI - {datetime.now().strftime('%d/%m/%Y')} - {len(jobs)} vagas encontradas"
 
-        # Versão texto simples (mobile-friendly)
-        text_version = f"""VAGAS TI - LUCAS BARBOSA PEDRO
-{datetime.now().strftime('%d/%m/%Y %H:%M')}
+        # Versão texto simples
+        text_version = content
 
-{content}
+        # Versão HTML (organizada e bonita)
+        top_jobs = sorted(jobs, key=lambda j: j["score"], reverse=True)[:5]
 
----
-Agente Vagas TI v4.0
-Para mais detalhes, veja a nota no Obsidian.
-"""
+        html_jobs = ""
+        for i, job in enumerate(top_jobs, 1):
+            score = job["score"]
+            color = "#22c55e" if score >= 70 else ("#eab308" if score >= 40 else "#ef4444")
+            html_jobs += f"""
+            <div style="background:#f8f9fa;border-radius:10px;padding:14px;margin:8px 0;border-left:4px solid {color};">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:600;font-size:15px;color:#333;">{i}. {job['title'][:60]}</span>
+                    <span style="background:{color};color:white;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;">{score}/100</span>
+                </div>
+                <a href="{job['link']}" style="color:#667eea;text-decoration:none;font-size:13px;">Ver vaga →</a>
+            </div>"""
 
-        # Versão HTML (mais bonita no celular)
         html_version = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 16px; background: #f5f5f5; color: #333; }}
-  .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
-  h1 {{ color: #2563eb; font-size: 20px; margin-bottom: 4px; }}
-  .subtitle {{ color: #666; font-size: 13px; margin-bottom: 16px; }}
-  .section {{ margin: 16px 0; padding: 12px; border-radius: 8px; background: #f8f9fa; }}
-  .section h2 {{ font-size: 16px; margin: 0 0 8px 0; }}
-  .job {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
-  .job:last-child {{ border-bottom: none; }}
-  .score {{ display: inline-block; background: #2563eb; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }}
-  .score-high {{ background: #16a34a; }}
-  .score-med {{ background: #ca8a04; }}
-  .score-low {{ background: #dc2626; }}
-  .link {{ color: #2563eb; text-decoration: none; font-size: 13px; }}
-  .footer {{ text-align: center; color: #999; font-size: 11px; margin-top: 20px; padding-top: 12px; border-top: 1px solid #eee; }}
-  pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 12px; background: #f1f1f1; padding: 8px; border-radius: 6px; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin:0; padding:0; background:#f0f2f5; }}
+    .container {{ max-width:600px; margin:0 auto; background:white; border-radius:16px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.1); }}
+    .header {{ background:linear-gradient(135deg,#667eea,#764ba2); padding:24px; color:white; text-align:center; }}
+    .header h1 {{ margin:0; font-size:22px; }}
+    .header p {{ margin:6px 0 0 0; opacity:0.9; font-size:13px; }}
+    .content {{ padding:20px; }}
+    .section {{ margin:16px 0; }}
+    .section-title {{ font-size:16px; font-weight:600; color:#333; margin-bottom:8px; border-bottom:2px solid #667eea; padding-bottom:4px; }}
+    .stats {{ display:flex; gap:12px; margin:12px 0; }}
+    .stat {{ flex:1; background:#f8f9fa; border-radius:10px; padding:12px; text-align:center; }}
+    .stat-num {{ font-size:24px; font-weight:700; color:#667eea; }}
+    .stat-label {{ font-size:11px; color:#666; }}
+    .footer {{ text-align:center; color:#999; font-size:11px; padding:16px; border-top:1px solid #eee; }}
+    .cta {{ display:block; text-align:center; background:linear-gradient(135deg,#667eea,#764ba2); color:white; padding:12px; border-radius:10px; text-decoration:none; font-weight:600; margin:16px 0; }}
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>📋 Vagas TI — Lucas</h1>
-  <p class="subtitle">{datetime.now().strftime('%d/%m/%Y %H:%M')} · Agente v4.0</p>
-  <div class="section">
-    <pre>{content[:3000]}</pre>
-  </div>
-  <div class="footer">
-    Agente Vagas TI · Gerado automaticamente<br>
-    Para mais detalhes, veja a nota no Obsidian.
-  </div>
+    <div class="header">
+        <h1>Vagas TI - Lucas</h1>
+        <p>{datetime.now().strftime('%d/%m/%Y %H:%M')} | {len(jobs)} vagas encontradas</p>
+    </div>
+    <div class="content">
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-num">{len(jobs)}</div>
+                <div class="stat-label">Total</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">{len([j for j in jobs if j['score'] >= 70])}</div>
+                <div class="stat-label">Top (70+)</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">{len([j for j in jobs if 40 <= j['score'] < 70])}</div>
+                <div class="stat-label">Medias</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Top 5 Vagas</div>
+            {html_jobs if html_jobs else '<p style="color:#999;">Nenhuma vaga encontrada.</p>'}
+        </div>
+
+        <a href="https://github.com/lucass1108/agente-vagas-ti" class="cta">Ver todas as vagas no GitHub</a>
+
+        <div class="footer">
+            Agente Vagas TI v4.0 - Gerado automaticamente<br>
+            Para mais detalhes, veja a nota no Obsidian.
+        </div>
+    </div>
 </div>
 </body>
 </html>"""
@@ -802,7 +841,7 @@ Para mais detalhes, veja a nota no Obsidian.
             server.starttls()
             server.login(CONFIG["email_from"], CONFIG["email_password"])
             server.send_message(msg)
-        print("[OK] Email enviado com sucesso! (versão mobile)")
+        print("[OK] Email enviado com sucesso! (versao organizada)")
     except Exception as e:
         print(f"[ERRO] Falha ao enviar email: {e}")
 
