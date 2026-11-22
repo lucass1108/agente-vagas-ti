@@ -2,34 +2,43 @@ name: Agente Vagas TI
 
 on:
   schedule:
-    - cron: '0 11 * * 1-5'
+    - cron: '0 11 * * 1-5'   # 8h BRT
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vagas
+  cancel-in-progress: false
 
 jobs:
   buscar-vagas:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Checkout do repositorio
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Python 3.11
+      - name: Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Instalar dependencias
-        run: pip install -r requirements.txt
+      - name: Dependências do agente
+        run: pip install requests beautifulsoup4
 
-      - name: Rodar agente de vagas
+      - name: Rodar agente
         env:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          VAULT_PATH: ${{ github.workspace }}
-        run: python vagas_agent.py --email
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python vagas_agent.py --email --telegram
 
       - name: Commit resultados
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Atualizar vagas TI"
-          file_pattern: "*.md *.json"
+          file_pattern: "ultimas_vagas.json historico_vagas.json"

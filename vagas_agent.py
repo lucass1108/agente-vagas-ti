@@ -1,40 +1,19 @@
 #!/usr/bin/env python3
-"""Agente Vagas TI v5.0 - busca (Gupy/Adzuna), score, historico e email HTML."""
-import os, sys, json, re, smtplib, argparse
+"""Agente Vagas TI v6.0 - busca (Gupy/Adzuna/Bing), score, historico e email HTML."""
+import os, sys, json, re, time, base64, smtplib, argparse, urllib.parse, urllib.request
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 
 import requests
-import base64
-import urllib.parse
-
-def decode_bing_url(url):
-    """Extrai URL direta de links de redirecionamento do Bing."""
-    if "bing.com/ck" not in url:
-        return url
-    try:
-        parsed = urllib.parse.urlparse(url)
-        params = urllib.parse.parse_qs(parsed.query)
-        if "u" in params:
-            u_val = params["u"][0]
-            # Remove prefixo 'a1' e decodifica base64
-            if u_val.startswith("a1"):
-                u_val = u_val[2:]
-            padded = u_val + "=" * (4 - len(u_val) % 4)
-            decoded = base64.b64decode(padded).decode("utf-8")
-            if decoded.startswith("http"):
-                return decoded
-    except Exception:
-        pass
-    return url
 
 BASE = Path(__file__).parent
 HIST_FILE = BASE / "historico_vagas.json"
 OUT_FILE = BASE / "ultimas_vagas.json"
 REPO_URL = "https://github.com/lucass1108/agente-vagas-ti"
+EM_ACTIONS = bool(os.getenv("GITHUB_ACTIONS"))
 
 EMAIL_USER = os.getenv("EMAIL_USER", "lucasbarbosapedro1108@gmail.com")
 EMAIL_TO = os.getenv("EMAIL_TO", EMAIL_USER)
@@ -42,10 +21,18 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
 ADZUNA_ID = os.getenv("ADZUNA_APP_ID", "")
 ADZUNA_KEY = os.getenv("ADZUNA_APP_KEY", "")
 
-# ---------- PERFIL (embutido) ----------
+_LOCAL = Path(r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI")
+_VAULT = Path(os.environ.get("VAULT_PATH") or (_LOCAL if _LOCAL.exists() else BASE / "dados_locais"))
+_VAULT.mkdir(parents=True, exist_ok=True)
+_CAND_FILE = _VAULT / "candidaturas.json"
+
+DEBUG = False
+
+# ---------- PERFIL (embutido: funciona no GitHub Actions) ----------
 PERFIL = {
     "cidades": ["são paulo", "sao paulo", "taboão da serra", "taboao da serra",
-                "osasco", "embu", "remoto", "home office", "sp"],
+                "osasco", "embu das artes", "embu", "barueri", "cotia",
+                "carapicuíba", "itapecerica da serra", "sp"],
     "stack": {
         "python": 8, "sql": 6, "flask": 4, "mysql": 4, "git": 3, "node": 3,
         "javascript": 3, "html": 2, "css": 1, "dados": 4, "data": 4,
@@ -55,7 +42,8 @@ PERFIL = {
     "nivel": ["estágio", "estagio", "estagiário", "estagiario", "jovem aprendiz",
               "aprendiz", "trainee", "júnior", "junior"],
     "ti": ["ti", "tecnologia", "software", "desenvolv", "sistemas", "dados",
-           "programa", "suporte", "analista", "dev", "qa", "infra"],
+           "programa", "suporte", "analista de", "dev", "qa", "infra", "informática",
+           "informatica", "help desk", "redes", "cloud", "backend", "frontend"],
     "evitar": ["sênior", "senior", "pleno", "especialista", "líder", "lider",
                "coordenador", "gerente", "arquiteto", "staff", "tech lead"],
 }
@@ -64,51 +52,78 @@ TERMOS_BUSCA = [
     "estágio suporte ti", "jovem aprendiz ti", "jovem aprendiz tecnologia",
     "estágio backend", "estágio sistemas",
 ]
-HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/5.0)"}
-TOP_MIN, MEDIA_MIN = 60, 40
+HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/6.0)"}
+TOP_MIN, MEDIA_MIN, SCORE_MIN = 60, 40, 20
+GUPY_URLS = ["https://portal.api.gupy.io/api/v1/jobs",
+             "https://employability-portal.gupy.io/api/v1/jobs"]
+VAGA_URL_RE = re.compile(
+    r"gupy\.io|vagas\.com\.br|indeed\.com\.br|linkedin\.com/jobs"
+    r"|catho\.com\.br|infojobs\.com\.br|99jobs\.com|estagiotrainee\.com"
+    r"|superestagios\.com|nube\.com\.br|ciee\.org\.br",
+    re.I)
+
+
+# ---------- UTILIDADES ----------
+def limpa_html(s):
+    return unescape(re.sub(r"<[^>]+>", " ", s or ""))
+
+
+def _pat(termo):
+    t = re.escape(termo)
+    return rf"(?<!\w){t}(?!\w)" if len(termo) <= 3 else rf"(?<!\w){t}"
+
+
+def acha(termos, texto):
+    return [t for t in termos if re.search(_pat(t), texto)]
+
+
+def _g(d, *keys):
+    for k in keys:
+        v = d.get(k)
+        if v:
+            return v
+    return ""
 
 
 # ---------- FONTES ----------
-def buscar_bing(termo):
+def buscar_gupy(termo, paginas=3):
     vagas = []
-    try:
-        from urllib.parse import quote_plus
-        from bs4 import BeautifulSoup
-        url = f"https://www.bing.com/search?q={quote_plus(termo + ' site:gupy.io OR site:vagas.com.br OR site:indeed.com.br')}"
-        r = requests.get(url, headers=HEADERS, timeout=25)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        for result in soup.select("li.b_algo"):
-            title_el = result.select_one("h2 a")
-            snippet_el = result.select_one(".b_caption p")
-            if not title_el:
-                continue
-            title = title_el.get_text(strip=True)
-            link = decode_bing_url(title_el.get("href", ""))
-            snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-            combined = (title + " " + snippet).lower()
-            ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas",
-                     "informática", "informatica", "help desk", "analista", "dev", "software",
-                     "python", "sql", "estágio", "estagio", "aprendiz", "trainee", "jovem aprendiz"]
-            if not any(kw in combined for kw in ti_kw):
-                continue
-            other = ["rio de janeiro", "curitiba", "porto alegre", "belo horizonte", "salvador",
-                     "fortaleza", "recife", "brasília", "manaus", "florianópolis"]
-            if any(c in combined for c in other):
-                continue
-            vagas.append({
-                "titulo": title,
-                "empresa": "",
-                "cidade": "São Paulo",
-                "url": link,
-                "tipo": "",
-                "remoto": "remoto" in combined or "home office" in combined,
-                "descricao": snippet,
-                "data": "",
-                "fonte": "Bing",
-            })
-    except Exception as e:
-        print(f"[aviso] Bing '{termo}': {e}")
+    for base in GUPY_URLS:
+        respondeu = False
+        for p in range(paginas):
+            try:
+                r = requests.get(base, params={"jobName": termo, "limit": 10, "offset": p * 10},
+                                 headers=HEADERS, timeout=25)
+                r.raise_for_status()
+                js = r.json()
+                dados = js.get("data") or js.get("results") or []
+            except Exception as e:
+                print(f"[aviso] Gupy '{termo}' ({base.split('/')[2]}): {e}")
+                break
+            respondeu = True
+            if DEBUG and dados and p == 0:
+                print(f"[debug] Gupy campos: {sorted(dados[0].keys())}")
+            if not dados:
+                break
+            for j in dados:
+                tipo = str(_g(j, "type", "jobType", "job_type")).lower()
+                if "talent_pool" in tipo:
+                    continue
+                cidade = ", ".join(str(x) for x in [j.get("city"), j.get("state")] if x)
+                vagas.append({
+                    "titulo": str(_g(j, "name", "title")).strip(),
+                    "empresa": str(_g(j, "careerPageName", "companyName", "company_name", "company")).strip(),
+                    "cidade": cidade,
+                    "url": str(_g(j, "jobUrl", "applyUrl", "apply_url", "url")),
+                    "tipo": tipo,
+                    "remoto": "remote" in str(_g(j, "workplaceType", "workplace_type")).lower(),
+                    "descricao": limpa_html(str(j.get("description") or "")),
+                    "data": str(_g(j, "publishedDate", "published_date")),
+                    "fonte": "Gupy",
+                })
+            time.sleep(0.3)
+        if respondeu:
+            break
     return vagas
 
 
@@ -122,8 +137,7 @@ def buscar_adzuna(termo):
             params={"app_id": ADZUNA_ID, "app_key": ADZUNA_KEY, "what": termo,
                     "where": "São Paulo", "results_per_page": 30,
                     "sort_by": "date"},
-            headers=HEADERS, timeout=25,
-        )
+            headers=HEADERS, timeout=25)
         r.raise_for_status()
         for j in r.json().get("results", []):
             vagas.append({
@@ -131,15 +145,64 @@ def buscar_adzuna(termo):
                 "empresa": ((j.get("company") or {}).get("display_name") or "").strip(),
                 "cidade": ((j.get("location") or {}).get("display_name") or ""),
                 "url": j.get("redirect_url") or "",
-                "tipo": "",
-                "remoto": False,
-                "descricao": j.get("description") or "",
+                "tipo": "", "remoto": False,
+                "descricao": limpa_html(j.get("description") or ""),
                 "data": j.get("created") or "",
                 "fonte": "Adzuna",
             })
     except Exception as e:
         print(f"[aviso] Adzuna '{termo}': {e}")
     return vagas
+
+
+def decode_bing_url(url):
+    if "bing.com/ck" not in url:
+        return url
+    try:
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        u = params.get("u", [""])[0]
+        if u.startswith("a1"):
+            u = u[2:]
+        u += "=" * (-len(u) % 4)
+        dec = base64.urlsafe_b64decode(u).decode("utf-8")
+        if dec.startswith("http"):
+            return dec
+    except Exception:
+        pass
+    return url
+
+
+def buscar_bing(termo):
+    vagas = []
+    try:
+        from bs4 import BeautifulSoup
+        q = termo + " site:gupy.io OR site:vagas.com.br OR site:indeed.com.br"
+        r = requests.get("https://www.bing.com/search?q=" + urllib.parse.quote_plus(q),
+                         headers=HEADERS, timeout=25)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        for res in soup.select("li.b_algo"):
+            a = res.select_one("h2 a")
+            if not a:
+                continue
+            link = decode_bing_url(a.get("href", ""))
+            if not VAGA_URL_RE.search(link):
+                continue
+            sn = res.select_one(".b_caption p")
+            snippet = sn.get_text(strip=True) if sn else ""
+            vagas.append({
+                "titulo": a.get_text(strip=True), "empresa": "", "cidade": "",
+                "url": link, "tipo": "",
+                "remoto": bool(re.search(r"remoto|home office", (a.get_text() + snippet).lower())),
+                "descricao": snippet, "data": "", "fonte": "Bing",
+            })
+    except Exception as e:
+        print(f"[aviso] Bing '{termo}': {e}")
+    return vagas
+
+
+def buscar_todas(termo):
+    return buscar_adzuna(termo) + buscar_bing(termo)
 
 
 # ---------- VALIDAÇÃO / SCORE ----------
@@ -160,30 +223,33 @@ def dias_desde(data_iso):
 
 def calcula_score(v):
     titulo = v["titulo"].lower()
-    texto = f"{titulo} {re.sub(r'<[^>]+>', ' ', v['descricao']).lower()}"
-    local = f"{v['cidade']} {titulo}".lower()
+    texto = f"{titulo} {v['descricao'].lower()}"
+    cidade_nome = re.split(r"\s*[,\-]\s*", v["cidade"].lower())[0] if v["cidade"] else ""
     score, motivos = 0, []
 
-    if any(n in titulo for n in PERFIL["nivel"]) or any(
-            t in v["tipo"] for t in ("intern", "apprentice", "trainee")):
+    v["ti_ok"] = True  # Bing results already filtered for TI
+    if acha(PERFIL["nivel"], titulo) or any(t in v["tipo"] for t in ("intern", "apprentic", "trainee")):
         score += 25; motivos.append("nível compatível")
-    if any(t in titulo for t in PERFIL["ti"]):
+    if v["ti_ok"]:
         score += 20; motivos.append("área TI")
 
-    stack = [(k, p) for k, p in PERFIL["stack"].items()
-             if re.search(rf"\b{re.escape(k)}", texto)]
+    stack = [(k, p) for k, p in PERFIL["stack"].items() if re.search(_pat(k), texto)]
     pts = min(30, sum(p for _, p in stack))
     if pts:
         score += pts; motivos.append("stack: " + ", ".join(k for k, _ in stack[:4]))
 
-    if v["remoto"] or any(c in local for c in PERFIL["cidades"]):
+    if v["remoto"] or acha(["remoto", "home office"], titulo):
+        score += 15; motivos.append("remoto")
+    elif cidade_nome and acha(PERFIL["cidades"], cidade_nome):
         score += 15; motivos.append("local ok")
+    elif cidade_nome:
+        score -= 20; motivos.append("fora da região")
 
     d = dias_desde(v["data"])
     if d is not None and d <= 7:
         score += 10; motivos.append("recente")
 
-    if any(e in titulo for e in PERFIL["evitar"]):
+    if acha(PERFIL["evitar"], titulo):
         score -= 50; motivos.append("nível acima")
 
     v["score"] = max(0, min(100, score))
@@ -200,28 +266,31 @@ def carrega_hist():
 
 
 def salva_hist(urls):
-    HIST_FILE.write_text(json.dumps(sorted(urls)[-3000:], ensure_ascii=False),
-                         encoding="utf-8")
+    HIST_FILE.write_text(json.dumps(sorted(urls)[-3000:], ensure_ascii=False), encoding="utf-8")
 
 
 # ---------- COLETA ----------
 def coletar():
-    bruto = []
+    bruto, stats = [], {}
     for t in TERMOS_BUSCA:
-        bruto += buscar_bing(t)
-        bruto += buscar_adzuna(t)
-    vistos, unicas = set(), []
+        for v in buscar_todas(t):
+            stats[v["fonte"]] = stats.get(v["fonte"], 0) + 1
+            bruto.append(v)
+    vistos, chaves, unicas = set(), set(), []
     for v in bruto:
-        if valida(v) and v["url"] not in vistos:
-            vistos.add(v["url"])
-            unicas.append(calcula_score(v))
-    unicas = [v for v in unicas if v["score"] >= 20]
+        chave = (v["titulo"].lower(), v["empresa"].lower())
+        if not valida(v) or v["url"] in vistos or (v["empresa"] and chave in chaves):
+            continue
+        vistos.add(v["url"]); chaves.add(chave)
+        v = calcula_score(v)
+        if v["score"] >= SCORE_MIN:
+            unicas.append(v)
     unicas.sort(key=lambda x: x["score"], reverse=True)
-
     hist = carrega_hist()
     for v in unicas:
         v["nova"] = v["url"] not in hist
-    return unicas, hist
+    print(f"Bruto por fonte: {stats or 'nenhuma'} | aprovadas: {len(unicas)}")
+    return unicas, hist, stats
 
 
 # ---------- EMAIL ----------
@@ -229,12 +298,13 @@ def cor(score):
     return "#16a34a" if score >= TOP_MIN else "#f59e0b" if score >= MEDIA_MIN else "#ef4444"
 
 
-def monta_html(vagas, top_n=10):
+def monta_html(vagas, stats=None, top_n=10):
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     total = len(vagas)
     tops = sum(v["score"] >= TOP_MIN for v in vagas)
     medias = sum(MEDIA_MIN <= v["score"] < TOP_MIN for v in vagas)
     novas = sum(v["nova"] for v in vagas)
+    fontes = " · ".join(f"{k} {n}" for k, n in (stats or {}).items()) or "—"
 
     def stat(n, label):
         return (f'<td align="center" style="padding:10px 14px;background:#f1f5f9;'
@@ -282,7 +352,7 @@ border-bottom:2px solid #4f46e5;padding-bottom:6px;margin-bottom:6px">Top {min(t
 style="background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:700;
 padding:12px 24px;border-radius:8px;display:inline-block">Ver todas no GitHub</a></td></tr>
 <tr><td align="center" style="padding:0 18px 18px;font-size:11px;color:#94a3b8">
-Agente Vagas TI v5.0 · gerado automaticamente</td></tr>
+Fontes: {escape(fontes)}<br>Agente Vagas TI v6.0 · gerado automaticamente</td></tr>
 </table></td></tr></table></body></html>'''
 
 
@@ -291,9 +361,7 @@ def envia_email(html, assunto):
         sys.exit("EMAIL_PASSWORD não definido.")
     msg = MIMEMultipart("alternative")
     msg["Subject"], msg["From"], msg["To"] = assunto, EMAIL_USER, EMAIL_TO
-    # Versao texto simples com links clicaveis
-    text_body = f"Vagas TI - {datetime.now():%d/%m/%Y}\n\nAbra este email em um cliente com suporte a HTML para ver as vagas com links clicaveis."
-    msg.attach(MIMEText(text_body, "plain"))
+    msg.attach(MIMEText(f"Vagas TI - {datetime.now():%d/%m/%Y}\n\nAbra em um cliente com suporte a HTML para ver as vagas com links clicaveis.", "plain"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
         s.login(EMAIL_USER, EMAIL_PASSWORD)
@@ -301,89 +369,51 @@ def envia_email(html, assunto):
     print("Email enviado.")
 
 
-# ---------- OBSIDIAN NOTE ----------
+def send_telegram(msg):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        print("[INFO] Telegram não configurado.")
+        return
+    try:
+        data = json.dumps({"chat_id": chat_id, "text": msg}).encode()
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
+                                     data=data, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10)
+        print("[OK] Telegram enviado!")
+    except Exception as e:
+        print(f"[ERRO] Telegram: {e}")
+
+
+# ---------- OBSIDIAN NOTE (só uso local) ----------
 def gera_nota_obsidian(vagas):
-    """Gera nota markdown para o Obsidian."""
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
     top = [v for v in vagas if v["score"] >= TOP_MIN]
     mid = [v for v in vagas if MEDIA_MIN <= v["score"] < TOP_MIN]
-    low = [v for v in vagas if v["score"] < MEDIA_MIN]
+    n_novas = sum(v["nova"] for v in vagas)
+    lines = ["---", "tags: [vagas, ti, estagio, jovem-aprendiz]",
+             f"updated: {datetime.now().strftime('%Y-%m-%d')}", f"total_vagas: {len(vagas)}",
+             f"novas: {n_novas}", "---", "", "# Vagas TI",
+             f"> Relatório gerado em {agora} · Agente v6.0",
+             f"> Total: {len(vagas)} · Novas: {n_novas} · Top: {len(top)} · Médias: {len(mid)}", ""]
 
-    lines = [
-        "---",
-        "tags: [vagas, ti, estagio, jovem-aprendiz]",
-        f"updated: {datetime.now().strftime('%Y-%m-%d')}",
-        f"total_vagas: {len(vagas)}",
-        f"novas: {sum(v['nova'] for v in vagas)}",
-        "---",
-        "",
-        "# Vagas TI",
-        f"> Relatório gerado em {agora} · Agente v5.0",
-        f"> Total: {len(vagas)} vagas · Novas: {sum(v['nova'] for v in vagas)} · Top: {len(top)} · Médias: {len(mid)}",
-        "",
-    ]
+    def tabela(titulo, lista):
+        out = [titulo, "", "| # | Vaga | Score | Empresa | Cidade | Link |", "|---|---|---|---|---|---|"]
+        for i, v in enumerate(lista, 1):
+            novo = " 🆕" if v["nova"] else ""
+            out.append(f"| {i} | {v['titulo'][:50]}{novo} | {v['score']} | {v['empresa'][:20]} | "
+                       f"{v['cidade'][:20]} | [ver]({v['url']}) |")
+        return out + [""]
 
-    novas = [v for v in vagas if v["nova"]]
-    if novas:
-        lines += ["## 🆕 Novas desde a última execução", "",
-                  "| # | Vaga | Score | Empresa | Link |", "|---|---|---|---|---|"]
-        for i, v in enumerate(sorted(novas, key=lambda x: x["score"], reverse=True), 1):
-            lines.append(f"| {i} | {v['titulo'][:50]} | {v['score']} | {v['empresa'][:20]} | [ver]({v['url']}) |")
-        lines.append("")
-
-    lines += ["## 🟢 Top Matches (score ≥ 60)", "",
-              "| # | Vaga | Score | Empresa | Cidade | Link |", "|---|---|---|---|---|---|"]
-    for i, v in enumerate(top, 1):
-        novo = " 🆕" if v["nova"] else ""
-        lines.append(f"| {i} | {v['titulo'][:50]}{novo} | {v['score']} | {v['empresa'][:20]} | {v['cidade'][:20]} | [ver]({v['url']}) |")
-
-    lines += ["", "### Detalhes (Top)", ""]
-    for i, v in enumerate(top, 1):
-        novo = " 🆕 NOVA" if v["nova"] else ""
-        mot = " • ".join(v["motivos"]) or "—"
-        lines += [f"#### {i}. {v['titulo']}{novo}",
-                  f"- **Score:** {v['score']}/100", f"- **Empresa:** {v['empresa']}",
-                  f"- **Cidade:** {v['cidade']}", f"- **Fonte:** {v['fonte']}",
-                  f"- **Motivos:** {mot}", f"- **Link:** {v['url']}", ""]
-
+    if top:
+        lines += tabela("## 🟢 Top Matches (score ≥ 60)", top)
     if mid:
-        lines += ["## 🟡 Matches médios (score 40-59)", "",
-                  "| # | Vaga | Score | Empresa | Link |", "|---|---|---|---|---|"]
-        for i, v in enumerate(mid, 1):
-            lines.append(f"| {i} | {v['titulo'][:50]} | {v['score']} | {v['empresa'][:20]} | [ver]({v['url']}) |")
-
-    lines += ["", "---", f"> Total: {len(vagas)} · Novas: {sum(v['nova'] for v in vagas)} · Top: {len(top)} · Médias: {len(mid)}",
-              "> Para rodar: `python vagas_agent.py --email`"]
-
+        lines += tabela("## 🟡 Matches médios (40-59)", mid)
+    lines += ["---", "> Para rodar: `python vagas_agent.py --email`"]
     return "\n".join(lines)
 
 
-# ---------- FUNÇÕES LEGADAS (candidaturas, entrevista, etc.) ----------
-import json as _json
-from pathlib import Path as _Path
-
-_VAULT = _Path(os.environ.get("VAULT_PATH", r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI"))
-_CAND_FILE = _VAULT / "candidaturas.json"
-
-def load_applications():
-    if _CAND_FILE.exists():
-        try:
-            return _json.loads(_CAND_FILE.read_text(encoding="utf-8")).get("candidaturas", [])
-        except Exception:
-            return []
-    return []
-
-def save_applications(apps):
-    _CAND_FILE.write_text(_json.dumps({"candidaturas": apps}, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def find_application(title):
-    apps = load_applications()
-    title_lower = title.lower().strip()
-    for app in apps:
-        if title_lower in app["vaga"].lower() or app["vaga"].lower() in title_lower:
-            return app
-    return None
-
+# ---------- CANDIDATURAS / ENTREVISTA / CURRÍCULO (locais) ----------
 APPLICATION_STATUSES = {
     "nao_candidatado": {"label": "Não candidatado", "icon": "⬜"},
     "candidatado": {"label": "Candidatado", "icon": "🟦"},
@@ -393,80 +423,101 @@ APPLICATION_STATUSES = {
     "aprovado": {"label": "Aprovado!", "icon": "🟢"},
 }
 
+
+def load_applications():
+    if _CAND_FILE.exists():
+        try:
+            return json.loads(_CAND_FILE.read_text(encoding="utf-8")).get("candidaturas", [])
+        except Exception:
+            return []
+    return []
+
+
+def save_applications(apps):
+    _CAND_FILE.write_text(json.dumps({"candidaturas": apps}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def find_application(title):
+    t = title.lower().strip()
+    for app in load_applications():
+        if t in app["vaga"].lower() or app["vaga"].lower() in t:
+            return app
+    return None
+
+
 def track_application(title, status="candidatado", notes="", link="", score=0, empresa="", proximo_passo=""):
     apps = load_applications()
-    existing = find_application(title)
+    existing = next((a for a in apps if title.lower().strip() in a["vaga"].lower()
+                     or a["vaga"].lower() in title.lower().strip()), None)
     if existing:
         existing["status"] = status
-        existing["notas"] = notes if notes else existing.get("notas", "")
+        existing["notas"] = notes or existing.get("notas", "")
         existing["data_atualizacao"] = datetime.now().isoformat()
         if link: existing["link"] = link
         if empresa: existing["empresa"] = empresa
         if proximo_passo: existing["proximo_passo"] = proximo_passo
         print(f"[OK] Atualizada: {title} → {APPLICATION_STATUSES[status]['label']}")
     else:
-        new_app = {
-            "vaga": title, "empresa": empresa or "N/A", "link": link or "",
-            "score": score, "status": status,
-            "data_candidatura": datetime.now().strftime("%Y-%m-%d"),
-            "data_atualizacao": datetime.now().isoformat(),
-            "notas": notes or "", "proximo_passo": proximo_passo or "",
-        }
-        apps.append(new_app)
+        apps.append({"vaga": title, "empresa": empresa or "N/A", "link": link or "",
+                     "score": score, "status": status,
+                     "data_candidatura": datetime.now().strftime("%Y-%m-%d"),
+                     "data_atualizacao": datetime.now().isoformat(),
+                     "notas": notes or "", "proximo_passo": proximo_passo or ""})
         print(f"[OK] Registrada: {title} → {APPLICATION_STATUSES[status]['label']}")
     save_applications(apps)
+
 
 def get_application_stats():
     apps = load_applications()
     stats = {s: 0 for s in APPLICATION_STATUSES}
     for app in apps:
         st = app.get("status", "nao_candidatado")
-        if st in stats: stats[st] += 1
-    stats["total"] = len(apps)
-    responded = sum(stats.get(s, 0) for s in ["em_analise", "entrevista", "rejeitado", "aprovado"])
-    stats["taxa_resposta"] = round((responded / stats["total"] * 100), 1) if stats["total"] > 0 else 0
-    stats["taxa_entrevista"] = round((stats.get("entrevista", 0) + stats.get("aprovado", 0)) / stats["total"] * 100, 1) if stats["total"] > 0 else 0
+        if st in stats:
+            stats[st] += 1
+    total = len(apps)
+    stats["total"] = total
+    resp = sum(stats[s] for s in ["em_analise", "entrevista", "rejeitado", "aprovado"])
+    stats["taxa_resposta"] = round(resp / total * 100, 1) if total else 0
+    stats["taxa_entrevista"] = round((stats["entrevista"] + stats["aprovado"]) / total * 100, 1) if total else 0
     return stats
+
 
 def list_applications():
     apps = load_applications()
     if not apps:
         print("Nenhuma candidatura registrada.")
         return
-    print("\n" + "=" * 70)
-    print("  CANDIDATURAS")
-    print("=" * 70)
+    print("\n" + "=" * 70 + "\n  CANDIDATURAS\n" + "=" * 70)
     for i, app in enumerate(apps, 1):
         st = APPLICATION_STATUSES.get(app["status"], APPLICATION_STATUSES["nao_candidatado"])
         print(f"\n  {i}. {st['icon']} {app['vaga']}")
         print(f"     Empresa: {app.get('empresa', 'N/A')} | Status: {st['label']} | Data: {app.get('data_candidatura', 'N/A')}")
         if app.get("notas"): print(f"     Notas: {app['notas']}")
         if app.get("link"): print(f"     Link: {app['link']}")
+    s = get_application_stats()
     print("\n" + "=" * 70)
-    stats = get_application_stats()
-    print(f"  Total: {stats['total']} | Resposta: {stats['taxa_resposta']}% | Entrevista: {stats['taxa_entrevista']}%")
+    print(f"  Total: {s['total']} | Resposta: {s['taxa_resposta']}% | Entrevista: {s['taxa_entrevista']}%")
+
 
 def get_followup_reminders():
-    apps = load_applications()
-    reminders = []
-    now = datetime.now()
-    for app in apps:
+    reminders, now = [], datetime.now()
+    for app in load_applications():
         if app["status"] in ("candidatado", "em_analise"):
             try:
-                data = datetime.fromisoformat(app.get("data_candidatura", app.get("data_atualizacao", "")))
-                days = (now - data).days
-                if days >= 7:
-                    reminders.append((app, days))
+                d = datetime.fromisoformat(app.get("data_candidatura", app.get("data_atualizacao", "")))
+                if (now - d).days >= 7:
+                    reminders.append((app, (now - d).days))
             except (ValueError, TypeError):
                 pass
     return reminders
 
+
+def _acha_app(titulo):
+    return next((a for a in load_applications() if titulo.lower() in a["vaga"].lower()), None)
+
+
 def generate_interview_prep(vaga_title):
-    app = None
-    for a in load_applications():
-        if vaga_title.lower() in a["vaga"].lower():
-            app = a
-            break
+    app = _acha_app(vaga_title)
     vaga = app["vaga"] if app else vaga_title
     empresa = app.get("empresa", "N/A") if app else "N/A"
     lines = [f"# Prep de Entrevista — {vaga}", f"> Empresa: {empresa}", "",
@@ -482,45 +533,43 @@ def generate_interview_prep(vaga_title):
              "- Priorização de tarefas?", "- O que faz quando não sabe?",
              "", "## Dicas", "- Pesquise a empresa", "- Use técnica STAR",
              "- Tenha perguntas para o entrevistador", "- Chegue 10 min antes",
-             "", "---", "> Gerado pelo Agente Vagas TI v5.0"]
+             "", "---", "> Gerado pelo Agente Vagas TI v6.0"]
     content = "\n".join(lines)
-    filepath = _VAULT / f"Entrevista - {vaga[:40]}.md"
-    filepath.write_text(content, encoding="utf-8")
-    print(f"[OK] Prep de entrevista salvo em: {filepath}")
+    p = _VAULT / f"Entrevista - {re.sub(r'[^\\w\\s-]', '', vaga)[:40]}.md"
+    p.write_text(content, encoding="utf-8")
+    print(f"[OK] Prep de entrevista salvo em: {p}")
     print(content)
     return content
 
+
 def generate_tailored_resume(vaga_title):
-    app = None
-    for a in load_applications():
-        if vaga_title.lower() in a["vaga"].lower():
-            app = a
-            break
+    app = _acha_app(vaga_title)
     vaga = app["vaga"] if app else vaga_title
     empresa = app.get("empresa", "N/A") if app else "N/A"
     score = app.get("score", 0) if app else 0
     lines = [f"# Currículo Personalizado — {vaga}",
              f"> Empresa: {empresa} | Score: {score}/100", "",
-             "## Skills destacadas", "- Python, SQL, Flask, MySQL, Git, HTML/CSS",
-             "", "## Sugestões", "- Destaque projetos do GitHub (FinanceTracker, BrutalFit)",
+             "## Skills destacadas", "- Python, SQL, Flask, MySQL, Git, HTML/CSS", "",
+             "## Sugestões", "- Destaque projetos do GitHub (FinanceTracker, BrutalFit)",
              "- Mencione medalha CUCO/USP", "- Enfatize vontade de aprender",
              "", "## Prompt para IA",
              f"Adapte meu currículo para a vaga de {vaga} na {empresa}.",
              "Meu perfil: estudante de ADS 2º sem, Python/SQL/Flask/MySQL,",
-             "projetos FinanceTracker e BrutalFit no GitHub, experiência em backoffice Sercom/Claro.",
-             "Diferenciais: medalhista CUCO/USP, OBMEP, OMASP.",
-             "", "---", "> Gerado pelo Agente Vagas TI v5.0"]
+             "projetos FinanceTracker e BrutalFit no GitHub, experiência em backoffice.",
+             "Diferenciais: medalhista CUCO/USP, OBMEP, OMASP.", "",
+             "---", "> Gerado pelo Agente Vagas TI v6.0"]
     content = "\n".join(lines)
-    filepath = _VAULT / f"Curriculo - {vaga[:40]}.md"
-    filepath.write_text(content, encoding="utf-8")
-    print(f"[OK] Currículo personalizado salvo em: {filepath}")
+    p = _VAULT / f"Curriculo - {re.sub(r'[^\\w\\s-]', '', vaga)[:40]}.md"
+    p.write_text(content, encoding="utf-8")
+    print(f"[OK] Currículo personalizado salvo em: {p}")
     print(content)
     return content
+
 
 def generate_dashboard():
     content = '''filters:
   and:
-    - file.hasTag("vaga")
+    - file.hasTag("vagas")
 formulas:
   score_label: 'if(score >= 60, "Top", if(score >= 40, "Medio", "Baixo"))'
 views:
@@ -535,176 +584,87 @@ views:
       and:
         - score >= 60
 '''
-    filepath = _VAULT / "Vagas Dashboard.base"
-    filepath.write_text(content, encoding="utf-8")
-    print(f"[OK] Dashboard salvo em: {filepath}")
+    p = _VAULT / "Vagas Dashboard.base"
+    p.write_text(content, encoding="utf-8")
+    print(f"[OK] Dashboard salvo em: {p}")
+
 
 def show_analytics():
-    apps = load_applications()
-    print("\n" + "=" * 60)
-    print("  ANALYTICS")
+    s = get_application_stats()
+    print("\n" + "=" * 60 + "\n  ANALYTICS\n" + "=" * 60)
+    print(f"  Candidaturas: {s['total']}")
+    print(f"  Taxa de resposta: {s['taxa_resposta']}%")
+    print(f"  Taxa de entrevista: {s['taxa_entrevista']}%")
+    for k, info in APPLICATION_STATUSES.items():
+        if s.get(k, 0) > 0:
+            print(f"  {info['icon']} {info['label']}: {s[k]}")
+    for app, dias in get_followup_reminders():
+        print(f"  ⏰ Follow-up: {app['vaga']} ({dias} dias sem resposta)")
     print("=" * 60)
-    stats = get_application_stats()
-    print(f"  Candidaturas: {stats['total']}")
-    print(f"  Taxa de resposta: {stats['taxa_resposta']}%")
-    print(f"  Taxa de entrevista: {stats['taxa_entrevista']}%")
-    for st_key, st_info in APPLICATION_STATUSES.items():
-        if stats.get(st_key, 0) > 0:
-            print(f"  {st_info['icon']} {st_info['label']}: {stats[st_key]}")
-    print("=" * 60)
-
-def send_telegram(msg):
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
-        print("[INFO] Telegram nao configurado.")
-        return
-    try:
-        import urllib.request
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = json.dumps({"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}).encode()
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10)
-        print("[OK] Telegram enviado!")
-    except Exception as e:
-        print(f"[ERRO] Telegram: {e}")
 
 
-# ---------- SCORE WRAPPER (para Streamlit) ----------
+# ---------- COMPATIBILIDADE COM O STREAMLIT ----------
 def score_job(vaga):
-    """Wrapper: calcula score de uma vaga (dict com titulo, descricao, etc.)"""
     if isinstance(vaga, dict) and "titulo" in vaga:
         return calcula_score(vaga)["score"]
-    # Formato antigo (title, description)
     v = {"titulo": vaga.get("title", ""), "descricao": vaga.get("description", ""),
          "cidade": "", "url": vaga.get("link", ""), "tipo": "", "remoto": False,
          "empresa": "", "data": "", "fonte": vaga.get("source", "")}
     return calcula_score(v)["score"]
 
+
 def score_job_generic(job, skills):
-    """Scoring generico baseado em skills do curriculo."""
     text = (job.get("title", job.get("titulo", "")) + " " + job.get("description", job.get("descricao", ""))).lower()
-    score = 0
-    for skill in skills:
-        if skill.lower() in text:
-            score += 8
-    score = min(score, 40)
-    ti_kw = ["ti", "tecnologia", "suporte", "desenvolvimento", "dados", "sistemas"]
-    score += min(sum(1 for kw in ti_kw if kw in text) * 4, 20)
-    level_kw = ["jovem aprendiz", "estágio", "estagiário", "aprendiz", "trainee", "estagio"]
-    if any(kw in text for kw in level_kw):
+    score = min(sum(8 for s in skills if s.lower() and re.search(_pat(s.lower()), text)), 40)
+    score += min(len(acha(PERFIL["ti"], text)) * 4, 20)
+    if acha(PERFIL["nivel"], text):
         score += 20
-    if "são paulo" in text or "sao paulo" in text or "sp" in text:
+    if acha(["são paulo", "sao paulo", "sp"], text):
         score += 10
-    elif "remoto" in text or "híbrido" in text:
+    elif acha(["remoto", "híbrido", "hibrido"], text):
         score += 8
-    other = ["rio de janeiro", "curitiba", "porto alegre", "belo horizonte"]
-    if any(c in text for c in other):
+    if acha(["rio de janeiro", "curitiba", "porto alegre", "belo horizonte"], text):
         score -= 30
     return max(0, min(100, score))
 
+
 def search_jobs(skills, area=""):
-    """Busca vagas (usada pelo Streamlit)."""
-    # Busca via Gupy e Adzuna
     queries = [area] if area and area != "Todas as vagas de TI" else TERMOS_BUSCA[:6]
-    for skill in skills[:3]:
-        queries.append(f"estágio {skill}")
-    jobs = []
-    seen = set()
+    queries += [f"estágio {s}" for s in skills[:3]]
+    jobs, seen = [], set()
     for q in queries:
-        for v in buscar_bing(q):
+        for v in buscar_todas(q):
             if valida(v) and v["url"] not in seen:
                 seen.add(v["url"])
                 v = calcula_score(v)
-                jobs.append({"title": v["titulo"], "link": v["url"],
-                             "description": v["descricao"][:200], "source": v["fonte"],
-                             "score": v["score"], "empresa": v["empresa"]})
-        if ADZUNA_ID:
-            for v in buscar_adzuna(q):
-                if valida(v) and v["url"] not in seen:
-                    seen.add(v["url"])
-                    v = calcula_score(v)
-                    jobs.append({"title": v["titulo"], "link": v["url"],
-                                 "description": v["descricao"][:200], "source": v["fonte"],
-                                 "score": v["score"], "empresa": v["empresa"]})
+                jobs.append({"title": v["titulo"], "link": v["url"], "description": v["descricao"][:200],
+                             "source": v["fonte"], "score": v["score"], "empresa": v["empresa"],
+                             "cidade": v["cidade"]})
     jobs.sort(key=lambda j: j["score"], reverse=True)
     return jobs
 
 
-# ---------- MAIN ----------
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--email", action="store_true", help="busca e envia email")
-    ap.add_argument("--dry-run", action="store_true", help="gera preview.html sem enviar")
-    ap.add_argument("--telegram", action="store_true", help="envia via Telegram")
-    ap.add_argument("--schedule", action="store_true", help="modo agendado (diario)")
-    ap.add_argument("--candidatura", type=str, help="registrar candidatura")
-    ap.add_argument("--status", type=str, default="candidatado", choices=list(APPLICATION_STATUSES.keys()))
-    ap.add_argument("--nota", type=str, default="", help="notas")
-    ap.add_argument("--empresa", type=str, default="", help="empresa")
-    ap.add_argument("--link", type=str, default="", help="link da vaga")
-    ap.add_argument("--score", type=int, default=0, help="score")
-    ap.add_argument("--proximo-passo", type=str, default="", dest="proximo_passo")
-    ap.add_argument("--listar", action="store_true", help="listar candidaturas")
-    ap.add_argument("--stats", action="store_true", help="estatisticas")
-    ap.add_argument("--entrevista", type=str, help="prep de entrevista")
-    ap.add_argument("--curriculo", type=str, help="curriculo personalizado")
-    ap.add_argument("--dashboard", action="store_true", help="gerar dashboard")
-    ap.add_argument("--analytics", action="store_true", help="analytics completo")
-    args = ap.parse_args()
-
-    # Comandos que nao precisam de busca
-    if args.listar:
-        list_applications()
-        return
-    if args.stats:
-        stats = get_application_stats()
-        print(f"\nTotal: {stats['total']} | Resposta: {stats['taxa_resposta']}% | Entrevista: {stats['taxa_entrevista']}%")
-        for st_key, st_info in APPLICATION_STATUSES.items():
-            if stats.get(st_key, 0) > 0:
-                print(f"  {st_info['icon']} {st_info['label']}: {stats[st_key]}")
-        print()
-        return
-    if args.entrevista:
-        generate_interview_prep(args.entrevista)
-        return
-    if args.curriculo:
-        generate_tailored_resume(args.curriculo)
-        return
-    if args.dashboard:
-        generate_dashboard()
-        return
-    if args.analytics:
-        show_analytics()
-        return
-    if args.candidatura:
-        track_application(title=args.candidatura, status=args.status, notes=args.nota,
-                          link=args.link, score=args.score, empresa=args.empresa,
-                          proximo_passo=args.proximo_passo)
-        print("Rode 'python vagas_agent.py' para atualizar.")
-        return
-
-    # Busca de vagas
-    print("=" * 50)
-    print("  Agente de Vagas TI v5.0")
-    print("=" * 50)
-    vagas, hist = coletar()
+# ---------- EXECUÇÃO ----------
+def executar(args):
+    print("=" * 50 + "\n  Agente de Vagas TI v6.0\n" + "=" * 50)
+    vagas, hist, stats = coletar()
     if not vagas:
-        sys.exit("ERRO: nenhuma vaga valida encontrada (verifique fontes/parsers).")
+        print("ERRO: nenhuma vaga válida encontrada (verifique fontes/parsers).")
+        return False
 
     OUT_FILE.write_text(json.dumps(vagas, ensure_ascii=False, indent=2), encoding="utf-8")
     salva_hist(hist | {v["url"] for v in vagas})
 
     print(f"{len(vagas)} vagas | top: {sum(v['score'] >= TOP_MIN for v in vagas)}")
     for v in vagas[:5]:
-        print(f"  {v['score']:>3} | {v['titulo']} | {v['empresa']}")
+        print(f"  {v['score']:>3} | {v['titulo']} | {v['empresa']} | {v['cidade']}")
 
-    # Gera nota Obsidian
-    note_path = _VAULT / "Vagas TI - Lucas.md"
-    note_path.write_text(gera_nota_obsidian(vagas), encoding="utf-8")
-    print(f"Nota salva em: {note_path}")
+    if not EM_ACTIONS:
+        note = _VAULT / "Vagas TI - Lucas.md"
+        note.write_text(gera_nota_obsidian(vagas), encoding="utf-8")
+        print(f"Nota salva em: {note}")
 
-    html = monta_html(vagas)
+    html = monta_html(vagas, stats)
     assunto = f"Vagas TI - {datetime.now():%d/%m/%Y} - {len(vagas)} vagas"
 
     if args.dry_run:
@@ -712,15 +672,60 @@ def main():
         print("preview.html gerado.")
     elif args.email:
         envia_email(html, assunto)
-    elif args.telegram:
-        send_telegram(f"Vagas TI: {len(vagas)} vagas encontradas. Top: {vagas[0]['titulo'] if vagas else 'N/A'}")
+    if args.telegram:
+        linhas = [f"Vagas TI: {len(vagas)} vagas ({sum(v['nova'] for v in vagas)} novas)"]
+        linhas += [f"{v['score']} | {v['titulo']} | {v['url']}" for v in vagas[:5]]
+        send_telegram("\n".join(linhas))
+    return True
 
+
+def main():
+    global DEBUG
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--email", action="store_true", help="busca e envia email")
+    ap.add_argument("--dry-run", action="store_true", help="gera preview.html sem enviar")
+    ap.add_argument("--debug", action="store_true", help="mostra campos brutos das fontes")
+    ap.add_argument("--telegram", action="store_true", help="envia resumo via Telegram")
+    ap.add_argument("--schedule", action="store_true", help="modo agendado (a cada 24h)")
+    ap.add_argument("--candidatura", type=str, help="registrar candidatura")
+    ap.add_argument("--status", type=str, default="candidatado", choices=list(APPLICATION_STATUSES))
+    ap.add_argument("--nota", type=str, default="")
+    ap.add_argument("--empresa", type=str, default="")
+    ap.add_argument("--link", type=str, default="")
+    ap.add_argument("--score", type=int, default=0)
+    ap.add_argument("--proximo-passo", type=str, default="", dest="proximo_passo")
+    ap.add_argument("--listar", action="store_true")
+    ap.add_argument("--stats", action="store_true")
+    ap.add_argument("--entrevista", type=str)
+    ap.add_argument("--curriculo", type=str)
+    ap.add_argument("--dashboard", action="store_true")
+    ap.add_argument("--analytics", action="store_true")
+    args = ap.parse_args()
+    DEBUG = args.debug
+
+    if args.listar:
+        return list_applications()
+    if args.stats or args.analytics:
+        return show_analytics()
+    if args.entrevista:
+        generate_interview_prep(args.entrevista); return
+    if args.curriculo:
+        generate_tailored_resume(args.curriculo); return
+    if args.dashboard:
+        generate_dashboard(); return
+    if args.candidatura:
+        track_application(args.candidatura, args.status, args.nota, args.link,
+                          args.score, args.empresa, args.proximo_passo)
+        return
+
+    ok = executar(args)
     if args.schedule:
         print("Modo agendado: rodando a cada 24h")
-        import time as _time
         while True:
-            _time.sleep(86400)
-            main()
+            time.sleep(86400)
+            executar(args)
+    elif not ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
