@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agente Vagas TI v6.0 - busca (Gupy/Adzuna/Bing), score, historico e email HTML."""
+"""Agente Vagas TI v6.1 - busca (Gupy/Adzuna/Bing), score, historico e email HTML."""
 import os, sys, json, re, time, base64, smtplib, argparse, urllib.parse, urllib.request
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
@@ -52,14 +52,14 @@ TERMOS_BUSCA = [
     "estágio suporte ti", "jovem aprendiz ti", "jovem aprendiz tecnologia",
     "estágio backend", "estágio sistemas",
 ]
-HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/6.0)"}
-TOP_MIN, MEDIA_MIN, SCORE_MIN = 60, 40, 20
-GUPY_URLS = ["https://portal.api.gupy.io/api/v1/jobs",
-             "https://employability-portal.gupy.io/api/v1/jobs"]
+HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/6.1)"}
+TOP_MIN, MEDIA_MIN, SCORE_MIN = 60, 40, 30
+GUPY_URL = "https://portal.gupy.io/api/job-search/jobs"
+GUPY_LIMIT = 50
+# Bing: só aceita links que são vaga individual (não homepage de portal)
 VAGA_URL_RE = re.compile(
-    r"gupy\.io|vagas\.com\.br|indeed\.com\.br|linkedin\.com/jobs"
-    r"|catho\.com\.br|infojobs\.com\.br|99jobs\.com|estagiotrainee\.com"
-    r"|superestagios\.com|nube\.com\.br|ciee\.org\.br",
+    r"gupy\.io/(?:jobs?|job)/|vagas\.com\.br/vagas/v\d+|indeed\.com\.br/(?:viewjob|rc/clk)"
+    r"|linkedin\.com/jobs/view|catho\.com\.br/vagas/|infojobs\.com\.br/vaga|99jobs\.com/.+/jobs/",
     re.I)
 
 
@@ -70,6 +70,7 @@ def limpa_html(s):
 
 def _pat(termo):
     t = re.escape(termo)
+    # termos curtos: palavra inteira; longos: início de palavra (radicais)
     return rf"(?<!\w){t}(?!\w)" if len(termo) <= 3 else rf"(?<!\w){t}"
 
 
@@ -86,23 +87,27 @@ def _g(d, *keys):
 
 
 # ---------- FONTES ----------
-def buscar_gupy(termo, paginas=3):
+def _gupy_get(termo, offset, estado):
+    params = {"jobName": termo, "limit": GUPY_LIMIT, "offset": offset}
+    if estado:
+        params["state"] = estado
+    r = requests.get(GUPY_URL, params=params, headers=HEADERS, timeout=25)
+    r.raise_for_status()
+    return r.json().get("data") or []
+
+
+def buscar_gupy(termo, paginas=2):
     vagas = []
-    for base in GUPY_URLS:
-        respondeu = False
+    for estado in ("SP", ""):  # tenta filtrar por SP; se vier vazio, tenta sem filtro
         for p in range(paginas):
             try:
-                r = requests.get(base, params={"jobName": termo, "limit": 10, "offset": p * 10},
-                                 headers=HEADERS, timeout=25)
-                r.raise_for_status()
-                js = r.json()
-                dados = js.get("data") or js.get("results") or []
+                dados = _gupy_get(termo, p * GUPY_LIMIT, estado)
             except Exception as e:
-                print(f"[aviso] Gupy '{termo}' ({base.split('/')[2]}): {e}")
+                print(f"[aviso] Gupy '{termo}': {e}")
                 break
-            respondeu = True
-            if DEBUG and dados and p == 0:
+            if DEBUG and dados and p == 0 and not vagas:
                 print(f"[debug] Gupy campos: {sorted(dados[0].keys())}")
+                print(f"[debug] Gupy 1ª vaga: {json.dumps(dados[0], ensure_ascii=False)[:600]}")
             if not dados:
                 break
             for j in dados:
@@ -122,7 +127,7 @@ def buscar_gupy(termo, paginas=3):
                     "fonte": "Gupy",
                 })
             time.sleep(0.3)
-        if respondeu:
+        if vagas:
             break
     return vagas
 
@@ -135,8 +140,7 @@ def buscar_adzuna(termo):
         r = requests.get(
             "https://api.adzuna.com/v1/api/jobs/br/search/1",
             params={"app_id": ADZUNA_ID, "app_key": ADZUNA_KEY, "what": termo,
-                    "where": "São Paulo", "results_per_page": 30,
-                    "sort_by": "date"},
+                    "where": "São Paulo", "results_per_page": 30, "sort_by": "date"},
             headers=HEADERS, timeout=25)
         r.raise_for_status()
         for j in r.json().get("results", []):
@@ -187,7 +191,7 @@ def buscar_bing(termo):
                 continue
             link = decode_bing_url(a.get("href", ""))
             if not VAGA_URL_RE.search(link):
-                continue
+                continue  # descarta homepages e portais
             sn = res.select_one(".b_caption p")
             snippet = sn.get_text(strip=True) if sn else ""
             vagas.append({
@@ -202,7 +206,7 @@ def buscar_bing(termo):
 
 
 def buscar_todas(termo):
-    return buscar_adzuna(termo) + buscar_bing(termo)
+    return buscar_gupy(termo) + buscar_adzuna(termo) + buscar_bing(termo)
 
 
 # ---------- VALIDAÇÃO / SCORE ----------
@@ -227,7 +231,7 @@ def calcula_score(v):
     cidade_nome = re.split(r"\s*[,\-]\s*", v["cidade"].lower())[0] if v["cidade"] else ""
     score, motivos = 0, []
 
-    v["ti_ok"] = True  # Bing results already filtered for TI
+    v["ti_ok"] = bool(acha(PERFIL["ti"], titulo))
     if acha(PERFIL["nivel"], titulo) or any(t in v["tipo"] for t in ("intern", "apprentic", "trainee")):
         score += 25; motivos.append("nível compatível")
     if v["ti_ok"]:
@@ -283,7 +287,7 @@ def coletar():
             continue
         vistos.add(v["url"]); chaves.add(chave)
         v = calcula_score(v)
-        if v["score"] >= SCORE_MIN:
+        if v["ti_ok"] and v["score"] >= SCORE_MIN:
             unicas.append(v)
     unicas.sort(key=lambda x: x["score"], reverse=True)
     hist = carrega_hist()
@@ -352,7 +356,7 @@ border-bottom:2px solid #4f46e5;padding-bottom:6px;margin-bottom:6px">Top {min(t
 style="background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:700;
 padding:12px 24px;border-radius:8px;display:inline-block">Ver todas no GitHub</a></td></tr>
 <tr><td align="center" style="padding:0 18px 18px;font-size:11px;color:#94a3b8">
-Fontes: {escape(fontes)}<br>Agente Vagas TI v6.0 · gerado automaticamente</td></tr>
+Fontes: {escape(fontes)}<br>Agente Vagas TI v6.1 · gerado automaticamente</td></tr>
 </table></td></tr></table></body></html>'''
 
 
@@ -361,7 +365,7 @@ def envia_email(html, assunto):
         sys.exit("EMAIL_PASSWORD não definido.")
     msg = MIMEMultipart("alternative")
     msg["Subject"], msg["From"], msg["To"] = assunto, EMAIL_USER, EMAIL_TO
-    msg.attach(MIMEText(f"Vagas TI - {datetime.now():%d/%m/%Y}\n\nAbra em um cliente com suporte a HTML para ver as vagas com links clicaveis.", "plain"))
+    msg.attach(MIMEText(f"Vagas TI - {datetime.now():%d/%m/%Y}\n\nAbra em um cliente com suporte a HTML.", "plain"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
         s.login(EMAIL_USER, EMAIL_PASSWORD)
@@ -394,7 +398,7 @@ def gera_nota_obsidian(vagas):
     lines = ["---", "tags: [vagas, ti, estagio, jovem-aprendiz]",
              f"updated: {datetime.now().strftime('%Y-%m-%d')}", f"total_vagas: {len(vagas)}",
              f"novas: {n_novas}", "---", "", "# Vagas TI",
-             f"> Relatório gerado em {agora} · Agente v6.0",
+             f"> Relatório gerado em {agora} · Agente v6.1",
              f"> Total: {len(vagas)} · Novas: {n_novas} · Top: {len(top)} · Médias: {len(mid)}", ""]
 
     def tabela(titulo, lista):
@@ -533,9 +537,9 @@ def generate_interview_prep(vaga_title):
              "- Priorização de tarefas?", "- O que faz quando não sabe?",
              "", "## Dicas", "- Pesquise a empresa", "- Use técnica STAR",
              "- Tenha perguntas para o entrevistador", "- Chegue 10 min antes",
-             "", "---", "> Gerado pelo Agente Vagas TI v6.0"]
+             "", "---", "> Gerado pelo Agente Vagas TI v6.1"]
     content = "\n".join(lines)
-    p = _VAULT / f"Entrevista - {re.sub(r'[^\\w\\s-]', '', vaga)[:40]}.md"
+    p = _VAULT / f"Entrevista - {re.sub(r'[^\w\s-]', '', vaga)[:40]}.md"
     p.write_text(content, encoding="utf-8")
     print(f"[OK] Prep de entrevista salvo em: {p}")
     print(content)
@@ -547,19 +551,17 @@ def generate_tailored_resume(vaga_title):
     vaga = app["vaga"] if app else vaga_title
     empresa = app.get("empresa", "N/A") if app else "N/A"
     score = app.get("score", 0) if app else 0
-    lines = [f"# Currículo Personalizado — {vaga}",
-             f"> Empresa: {empresa} | Score: {score}/100", "",
+    lines = [f"# Currículo Personalizado — {vaga}", f"> Empresa: {empresa} | Score: {score}/100", "",
              "## Skills destacadas", "- Python, SQL, Flask, MySQL, Git, HTML/CSS", "",
              "## Sugestões", "- Destaque projetos do GitHub (FinanceTracker, BrutalFit)",
-             "- Mencione medalha CUCO/USP", "- Enfatize vontade de aprender",
-             "", "## Prompt para IA",
-             f"Adapte meu currículo para a vaga de {vaga} na {empresa}.",
+             "- Mencione medalha CUCO/USP", "- Enfatize vontade de aprender", "",
+             "## Prompt para IA", f"Adapte meu currículo para a vaga de {vaga} na {empresa}.",
              "Meu perfil: estudante de ADS 2º sem, Python/SQL/Flask/MySQL,",
              "projetos FinanceTracker e BrutalFit no GitHub, experiência em backoffice.",
              "Diferenciais: medalhista CUCO/USP, OBMEP, OMASP.", "",
-             "---", "> Gerado pelo Agente Vagas TI v6.0"]
+             "---", "> Gerado pelo Agente Vagas TI v6.1"]
     content = "\n".join(lines)
-    p = _VAULT / f"Curriculo - {re.sub(r'[^\\w\\s-]', '', vaga)[:40]}.md"
+    p = _VAULT / f"Curriculo - {re.sub(r'[^\w\s-]', '', vaga)[:40]}.md"
     p.write_text(content, encoding="utf-8")
     print(f"[OK] Currículo personalizado salvo em: {p}")
     print(content)
@@ -646,7 +648,7 @@ def search_jobs(skills, area=""):
 
 # ---------- EXECUÇÃO ----------
 def executar(args):
-    print("=" * 50 + "\n  Agente de Vagas TI v6.0\n" + "=" * 50)
+    print("=" * 50 + "\n  Agente de Vagas TI v6.1\n" + "=" * 50)
     vagas, hist, stats = coletar()
     if not vagas:
         print("ERRO: nenhuma vaga válida encontrada (verifique fontes/parsers).")
@@ -666,7 +668,6 @@ def executar(args):
 
     html = monta_html(vagas, stats)
     assunto = f"Vagas TI - {datetime.now():%d/%m/%Y} - {len(vagas)} vagas"
-
     if args.dry_run:
         (BASE / "preview.html").write_text(html, encoding="utf-8")
         print("preview.html gerado.")
