@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agente Vagas TI v6.1 - busca (Gupy/Adzuna/Bing), score, historico e email HTML."""
+"""Agente Vagas TI v6.2 - busca (Gupy/Adzuna/Bing), score, historico e email HTML."""
 import os, sys, json, re, time, base64, smtplib, argparse, urllib.parse, urllib.request
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
@@ -27,6 +27,7 @@ _VAULT.mkdir(parents=True, exist_ok=True)
 _CAND_FILE = _VAULT / "candidaturas.json"
 
 DEBUG = False
+_debug_gupy_feito = False
 
 # ---------- PERFIL (embutido: funciona no GitHub Actions) ----------
 PERFIL = {
@@ -39,8 +40,8 @@ PERFIL = {
         "suporte": 3, "backend": 4, "back-end": 4, "desenvolvimento": 3,
         "desenvolvedor": 3, "sistemas": 2, "api": 2, "automação": 3,
     },
-    "nivel": ["estágio", "estagio", "estagiário", "estagiario", "jovem aprendiz",
-              "aprendiz", "trainee", "júnior", "junior"],
+    # radicais: "estági" casa estágio/estágios; "estagi" casa estagio/estagiaria/estagiária
+    "nivel": ["estági", "estagi", "jovem aprendiz", "aprendiz", "trainee", "júnior", "junior"],
     "ti": ["ti", "tecnologia", "software", "desenvolv", "sistemas", "dados",
            "programa", "suporte", "analista de", "dev", "qa", "infra", "informática",
            "informatica", "help desk", "redes", "cloud", "backend", "frontend"],
@@ -52,10 +53,13 @@ TERMOS_BUSCA = [
     "estágio suporte ti", "jovem aprendiz ti", "jovem aprendiz tecnologia",
     "estágio backend", "estágio sistemas",
 ]
-HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/6.1)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (AgenteVagasTI/6.2)"}
 TOP_MIN, MEDIA_MIN, SCORE_MIN = 60, 40, 30
+APENAS_REGIAO = True          # descarta vagas fora da região (exceto remotas)
 GUPY_URL = "https://portal.gupy.io/api/job-search/jobs"
 GUPY_LIMIT = 50
+GUPY_PAGINAS = 5
+GUPY_ESTADOS = ("São Paulo", "")  # tenta filtrar por estado; se vier vazio, tenta sem filtro
 # Bing: só aceita links que são vaga individual (não homepage de portal)
 VAGA_URL_RE = re.compile(
     r"gupy\.io/(?:jobs?|job)/|vagas\.com\.br/vagas/v\d+|indeed\.com\.br/(?:viewjob|rc/clk)"
@@ -86,6 +90,13 @@ def _g(d, *keys):
     return ""
 
 
+def fmt_prazo(p):
+    try:
+        return datetime.strptime(p[:10], "%Y-%m-%d").strftime("%d/%m")
+    except Exception:
+        return ""
+
+
 # ---------- FONTES ----------
 def _gupy_get(termo, offset, estado):
     params = {"jobName": termo, "limit": GUPY_LIMIT, "offset": offset}
@@ -96,12 +107,13 @@ def _gupy_get(termo, offset, estado):
     return r.json().get("data") or []
 
 
-def buscar_gupy(termo, paginas=2):
+def buscar_gupy(termo, paginas=GUPY_PAGINAS):
     vagas = []
-    for estado in ("SP", ""):  # tenta filtrar por SP; se vier vazio, tenta sem filtro
+    for estado in GUPY_ESTADOS:
+        offset = 0
         for p in range(paginas):
             try:
-                dados = _gupy_get(termo, p * GUPY_LIMIT, estado)
+                dados = _gupy_get(termo, offset, p and estado or estado)
             except Exception as e:
                 print(f"[aviso] Gupy '{termo}': {e}")
                 break
@@ -110,6 +122,7 @@ def buscar_gupy(termo, paginas=2):
                 print(f"[debug] Gupy 1ª vaga: {json.dumps(dados[0], ensure_ascii=False)[:600]}")
             if not dados:
                 break
+            offset += len(dados)  # avança pelo que a API realmente devolveu
             for j in dados:
                 tipo = str(_g(j, "type", "jobType", "job_type")).lower()
                 if "talent_pool" in tipo:
@@ -124,6 +137,7 @@ def buscar_gupy(termo, paginas=2):
                     "remoto": "remote" in str(_g(j, "workplaceType", "workplace_type")).lower(),
                     "descricao": limpa_html(str(j.get("description") or "")),
                     "data": str(_g(j, "publishedDate", "published_date")),
+                    "prazo": str(j.get("applicationDeadline") or "")[:10],
                     "fonte": "Gupy",
                 })
             time.sleep(0.3)
@@ -151,7 +165,7 @@ def buscar_adzuna(termo):
                 "url": j.get("redirect_url") or "",
                 "tipo": "", "remoto": False,
                 "descricao": limpa_html(j.get("description") or ""),
-                "data": j.get("created") or "",
+                "data": j.get("created") or "", "prazo": "",
                 "fonte": "Adzuna",
             })
     except Exception as e:
@@ -198,7 +212,7 @@ def buscar_bing(termo):
                 "titulo": a.get_text(strip=True), "empresa": "", "cidade": "",
                 "url": link, "tipo": "",
                 "remoto": bool(re.search(r"remoto|home office", (a.get_text() + snippet).lower())),
-                "descricao": snippet, "data": "", "fonte": "Bing",
+                "descricao": snippet, "data": "", "prazo": "", "fonte": "Bing",
             })
     except Exception as e:
         print(f"[aviso] Bing '{termo}': {e}")
@@ -280,20 +294,32 @@ def coletar():
         for v in buscar_todas(t):
             stats[v["fonte"]] = stats.get(v["fonte"], 0) + 1
             bruto.append(v)
+    hoje = datetime.now().strftime("%Y-%m-%d")
     vistos, chaves, unicas = set(), set(), []
+    descartes = {"invalida/duplicada": 0, "fora da região": 0, "encerrada": 0, "não TI/score baixo": 0}
     for v in bruto:
         chave = (v["titulo"].lower(), v["empresa"].lower())
         if not valida(v) or v["url"] in vistos or (v["empresa"] and chave in chaves):
+            descartes["invalida/duplicada"] += 1
             continue
         vistos.add(v["url"]); chaves.add(chave)
         v = calcula_score(v)
-        if v["ti_ok"] and v["score"] >= SCORE_MIN:
-            unicas.append(v)
+        if APENAS_REGIAO and "fora da região" in v["motivos"]:
+            descartes["fora da região"] += 1
+            continue
+        if v.get("prazo") and v["prazo"] < hoje:
+            descartes["encerrada"] += 1
+            continue
+        if not (v["ti_ok"] and v["score"] >= SCORE_MIN):
+            descartes["não TI/score baixo"] += 1
+            continue
+        unicas.append(v)
     unicas.sort(key=lambda x: x["score"], reverse=True)
     hist = carrega_hist()
     for v in unicas:
         v["nova"] = v["url"] not in hist
     print(f"Bruto por fonte: {stats or 'nenhuma'} | aprovadas: {len(unicas)}")
+    print(f"Descartadas: {descartes}")
     return unicas, hist, stats
 
 
@@ -322,7 +348,9 @@ def monta_html(vagas, stats=None, top_n=10):
         badge_novo = ('<span style="background:#4f46e5;color:#fff;font-size:10px;'
                       'padding:2px 6px;border-radius:8px;margin-left:6px">NOVA</span>'
                       if v["nova"] else "")
-        meta = " · ".join(x for x in [v["empresa"], v["cidade"], v["fonte"]] if x)
+        prazo = fmt_prazo(v.get("prazo", ""))
+        meta = " · ".join(x for x in [v["empresa"], v["cidade"], v["fonte"],
+                                      f"inscrições até {prazo}" if prazo else ""] if x)
         mot = escape(" • ".join(v["motivos"])) or "—"
         cards += f'''
 <tr><td style="padding:6px 0">
@@ -356,7 +384,7 @@ border-bottom:2px solid #4f46e5;padding-bottom:6px;margin-bottom:6px">Top {min(t
 style="background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:700;
 padding:12px 24px;border-radius:8px;display:inline-block">Ver todas no GitHub</a></td></tr>
 <tr><td align="center" style="padding:0 18px 18px;font-size:11px;color:#94a3b8">
-Fontes: {escape(fontes)}<br>Agente Vagas TI v6.1 · gerado automaticamente</td></tr>
+Fontes: {escape(fontes)}<br>Agente Vagas TI v6.2 · gerado automaticamente</td></tr>
 </table></td></tr></table></body></html>'''
 
 
@@ -398,15 +426,15 @@ def gera_nota_obsidian(vagas):
     lines = ["---", "tags: [vagas, ti, estagio, jovem-aprendiz]",
              f"updated: {datetime.now().strftime('%Y-%m-%d')}", f"total_vagas: {len(vagas)}",
              f"novas: {n_novas}", "---", "", "# Vagas TI",
-             f"> Relatório gerado em {agora} · Agente v6.1",
+             f"> Relatório gerado em {agora} · Agente v6.2",
              f"> Total: {len(vagas)} · Novas: {n_novas} · Top: {len(top)} · Médias: {len(mid)}", ""]
 
     def tabela(titulo, lista):
-        out = [titulo, "", "| # | Vaga | Score | Empresa | Cidade | Link |", "|---|---|---|---|---|---|"]
+        out = [titulo, "", "| # | Vaga | Score | Empresa | Cidade | Até | Link |", "|---|---|---|---|---|---|---|"]
         for i, v in enumerate(lista, 1):
             novo = " 🆕" if v["nova"] else ""
             out.append(f"| {i} | {v['titulo'][:50]}{novo} | {v['score']} | {v['empresa'][:20]} | "
-                       f"{v['cidade'][:20]} | [ver]({v['url']}) |")
+                       f"{v['cidade'][:20]} | {fmt_prazo(v.get('prazo', ''))} | [ver]({v['url']}) |")
         return out + [""]
 
     if top:
@@ -537,9 +565,10 @@ def generate_interview_prep(vaga_title):
              "- Priorização de tarefas?", "- O que faz quando não sabe?",
              "", "## Dicas", "- Pesquise a empresa", "- Use técnica STAR",
              "- Tenha perguntas para o entrevistador", "- Chegue 10 min antes",
-             "", "---", "> Gerado pelo Agente Vagas TI v6.1"]
+             "", "---", "> Gerado pelo Agente Vagas TI v6.2"]
     content = "\n".join(lines)
-    p = _VAULT / f"Entrevista - {re.sub(r'[^\w\s-]', '', vaga)[:40]}.md"
+    _safe = re.sub(r"[^\w\s-]", "", vaga)[:40]
+    p = _VAULT / f"Entrevista - {_safe}.md"
     p.write_text(content, encoding="utf-8")
     print(f"[OK] Prep de entrevista salvo em: {p}")
     print(content)
@@ -559,9 +588,10 @@ def generate_tailored_resume(vaga_title):
              "Meu perfil: estudante de ADS 2º sem, Python/SQL/Flask/MySQL,",
              "projetos FinanceTracker e BrutalFit no GitHub, experiência em backoffice.",
              "Diferenciais: medalhista CUCO/USP, OBMEP, OMASP.", "",
-             "---", "> Gerado pelo Agente Vagas TI v6.1"]
+             "---", "> Gerado pelo Agente Vagas TI v6.2"]
     content = "\n".join(lines)
-    p = _VAULT / f"Curriculo - {re.sub(r'[^\w\s-]', '', vaga)[:40]}.md"
+    _safe = re.sub(r"[^\w\s-]", "", vaga)[:40]
+    p = _VAULT / f"Curriculo - {_safe}.md"
     p.write_text(content, encoding="utf-8")
     print(f"[OK] Currículo personalizado salvo em: {p}")
     print(content)
@@ -611,7 +641,7 @@ def score_job(vaga):
         return calcula_score(vaga)["score"]
     v = {"titulo": vaga.get("title", ""), "descricao": vaga.get("description", ""),
          "cidade": "", "url": vaga.get("link", ""), "tipo": "", "remoto": False,
-         "empresa": "", "data": "", "fonte": vaga.get("source", "")}
+         "empresa": "", "data": "", "prazo": "", "fonte": vaga.get("source", "")}
     return calcula_score(v)["score"]
 
 
@@ -633,22 +663,25 @@ def score_job_generic(job, skills):
 def search_jobs(skills, area=""):
     queries = [area] if area and area != "Todas as vagas de TI" else TERMOS_BUSCA[:6]
     queries += [f"estágio {s}" for s in skills[:3]]
+    hoje = datetime.now().strftime("%Y-%m-%d")
     jobs, seen = [], set()
     for q in queries:
         for v in buscar_todas(q):
             if valida(v) and v["url"] not in seen:
                 seen.add(v["url"])
+                if v.get("prazo") and v["prazo"] < hoje:
+                    continue
                 v = calcula_score(v)
                 jobs.append({"title": v["titulo"], "link": v["url"], "description": v["descricao"][:200],
                              "source": v["fonte"], "score": v["score"], "empresa": v["empresa"],
-                             "cidade": v["cidade"]})
+                             "cidade": v["cidade"], "prazo": v.get("prazo", "")})
     jobs.sort(key=lambda j: j["score"], reverse=True)
     return jobs
 
 
 # ---------- EXECUÇÃO ----------
 def executar(args):
-    print("=" * 50 + "\n  Agente de Vagas TI v6.1\n" + "=" * 50)
+    print("=" * 50 + "\n  Agente de Vagas TI v6.2\n" + "=" * 50)
     vagas, hist, stats = coletar()
     if not vagas:
         print("ERRO: nenhuma vaga válida encontrada (verifique fontes/parsers).")
@@ -659,7 +692,7 @@ def executar(args):
 
     print(f"{len(vagas)} vagas | top: {sum(v['score'] >= TOP_MIN for v in vagas)}")
     for v in vagas[:5]:
-        print(f"  {v['score']:>3} | {v['titulo']} | {v['empresa']} | {v['cidade']}")
+        print(f"  {v['score']:>3} | {v['titulo']} | {v['empresa']} | {v['cidade']} | até {fmt_prazo(v.get('prazo', '')) or '-'}")
 
     if not EM_ACTIONS:
         note = _VAULT / "Vagas TI - Lucas.md"
@@ -685,7 +718,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--email", action="store_true", help="busca e envia email")
     ap.add_argument("--dry-run", action="store_true", help="gera preview.html sem enviar")
-    ap.add_argument("--debug", action="store_true", help="mostra campos brutos das fontes")
+    ap.add_argument("--debug", action="store_true", help="mostra campos e estados brutos da Gupy")
     ap.add_argument("--telegram", action="store_true", help="envia resumo via Telegram")
     ap.add_argument("--schedule", action="store_true", help="modo agendado (a cada 24h)")
     ap.add_argument("--candidatura", type=str, help="registrar candidatura")
