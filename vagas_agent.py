@@ -612,7 +612,7 @@ def search_jobs(skills, area=""):
     jobs = []
     seen = set()
     for q in queries:
-        for v in buscar_gupy(q):
+        for v in buscar_bing(q):
             if valida(v) and v["url"] not in seen:
                 seen.add(v["url"])
                 v = calcula_score(v)
