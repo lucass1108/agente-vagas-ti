@@ -1193,10 +1193,19 @@ elif page == "Chat":
         send = st.button("Enviar")
 
     if send and user_input.strip():
-        st.session_state.public_chat.append({"role": "user", "content": user_input})
-        response = chatbot_response(user_input)
-        st.session_state.public_chat.append({"role": "assistant", "content": response})
-        st.rerun()
+        if len(st.session_state.public_chat) >= 40:  # 20 user + 20 bot
+            st.warning("Limite de 20 mensagens por sessao atingido. Recarregue a pagina para continuar.")
+        else:
+            st.session_state.public_chat.append({"role": "user", "content": user_input})
+            if GEMINI_API_KEY:
+                context = "Candidato: Lucas Barbosa Pedro, ADS UNIFECAF, Python/SQL/Flask/MySQL, busca estagio/JA em TI em SP."
+                response = call_gemini(user_input, context)
+                if response.startswith("Erro") or response.startswith("Chave") or response.startswith("Limite"):
+                    response = chatbot_response(user_input)
+            else:
+                response = chatbot_response(user_input)
+            st.session_state.public_chat.append({"role": "assistant", "content": response})
+            st.rerun()
 
     if st.button("Limpar chat"):
         st.session_state.public_chat = []
