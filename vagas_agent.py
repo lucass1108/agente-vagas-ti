@@ -229,6 +229,19 @@ def valida(v):
             and not v["titulo"].isdigit())
 
 
+def vaga_aprovada(v, hoje=None):
+    if hoje is None:
+        hoje = datetime.now().strftime("%Y-%m-%d")
+    if not valida(v):
+        return False
+    v = calcula_score(v)
+    if APENAS_REGIAO and "fora da região" in v["motivos"]:
+        return False
+    if v.get("prazo") and v["prazo"] < hoje:
+        return False
+    return bool(v["ti_ok"] and v["score"] >= SCORE_MIN)
+
+
 def dias_desde(data_iso):
     try:
         d = datetime.fromisoformat(data_iso.replace("Z", "+00:00"))
