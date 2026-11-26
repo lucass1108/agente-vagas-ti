@@ -130,15 +130,27 @@ python vagas_agent.py --analytics        # analytics
 
 ```
 agente-vagas-ti/
-├── vagas_agent.py          # Script principal (v6.2)
+├── vagas_agent.py          # Orquestrador principal (v6.2)
 ├── streamlit_app.py        # App web (Streamlit Cloud)
 ├── telegram_bot.py         # Bot Telegram
+├── score.py                # Cálculo de score (modularizado)
+├── validacao.py            # Validação de vagas (modularizado)
+├── db.py                   # SQLite: histórico e deduplicação
+├── fontes/
+│   ├── gupy.py             # Fonte Gupy
+│   ├── adzuna.py           # Fonte Adzuna
+│   └── bing.py             # Fonte Bing
+├── notificacoes/
+│   ├── email.py            # E-mail HTML
+│   └── telegram.py         # Notificações Telegram
 ├── requirements.txt        # Dependências
 ├── README.md               # Este arquivo
 ├── .github/
 │   └── workflows/
-│       └── vagas.yml       # GitHub Actions (automação)
+│       ├── vagas.yml       # GitHub Actions (automação)
+│       └── tests.yml       # CI (pytest)
 ├── docs/                   # Prints/GIFs para o README
+├── tests/                  # Testes pytest
 └── .env.example            # Variáveis de ambiente (template)
 ```
 
