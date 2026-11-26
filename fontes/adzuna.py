@@ -1,0 +1,1 @@
+from vagas_agent import buscar_adzuna as buscar

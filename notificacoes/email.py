@@ -1,0 +1,1 @@
+from vagas_agent import monta_html, envia_email, cor, fmt_prazo

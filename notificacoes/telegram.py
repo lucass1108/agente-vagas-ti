@@ -1,0 +1,1 @@
+from vagas_agent import send_telegram
