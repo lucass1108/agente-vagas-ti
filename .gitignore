@@ -17,6 +17,8 @@
 !agente_linkedin.py
 !agente_linkedin_full.py
 !agente_status.py
+!db.py
+!migrar_para_sqlite.py
 !.github/
 !.github/workflows/
 !.github/workflows/vagas.yml
@@ -48,6 +50,7 @@ preview.html
 vagas.db
 *.log
 status_agente.md
+backup/
 
 # Obsidian / notas pessoais do vault
 .obsidian/
