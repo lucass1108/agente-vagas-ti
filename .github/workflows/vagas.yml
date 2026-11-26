@@ -1,44 +1,28 @@
 name: Agente Vagas TI
-
 on:
   schedule:
-    - cron: '0 11 * * 1-5'   # 8h BRT
+    - cron: '0 11 * * 1-5'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
-concurrency:
-  group: vagas
-  cancel-in-progress: false
-
 jobs:
-  buscar-vagas:
+  buscar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Dependências do agente
-        run: pip install requests beautifulsoup4
-
-      - name: Rodar agente
-        env:
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python vagas_agent.py --email --telegram
-
-      - name: Commit resultados
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - run: pip install -r requirements.txt
+      - name: Restaurar cache do banco
+        uses: actions/cache@v4
         with:
-          commit_message: "Atualizar vagas TI"
-          file_pattern: "ultimas_vagas.json historico_vagas.json"
+          path: vagas.db
+          key: vagas-db-${{ github.run_id }}
+          restore-keys: |
+            vagas-db-
+      - run: python vagas_agent.py --email
+      - name: Salvar cache do banco
+        uses: actions/cache/save@v4
+        with:
+          path: vagas.db
+          key: vagas-db-${{ github.run_id }}

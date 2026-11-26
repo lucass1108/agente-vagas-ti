@@ -387,9 +387,17 @@ def coletar():
             continue
         unicas.append(v)
     unicas.sort(key=lambda x: x["score"], reverse=True)
-    hist = carrega_hist()
-    for v in unicas:
-        v["nova"] = v["url"] not in hist
+    try:
+        import db as _db
+        _db.init_db()
+        for v in unicas:
+            v["nova"] = _db.upsert_vaga(v)
+        hist = set()
+    except Exception as e:
+        logger.warning(f"DB indisponível, usando histórico JSON: {e}")
+        hist = carrega_hist()
+        for v in unicas:
+            v["nova"] = v["url"] not in hist
     print(f"Bruto por fonte: {stats or 'nenhuma'} | aprovadas: {len(unicas)}")
     print(f"Descartadas: {descartes}")
     if FONTES_COM_FALHA:
