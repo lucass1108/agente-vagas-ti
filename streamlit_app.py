@@ -861,6 +861,11 @@ elif page == "Buscar Vagas":
                 st.markdown(f"**Cidade:** {v.get('cidade', '?')}")
                 st.markdown(f"**Fonte:** {v.get('fonte', '?')}")
                 st.markdown(f"**Link:** [{v.get('url', '')}]({v.get('url', '')})")
+                mot = v.get("motivos", [])
+                if mot:
+                    with st.expander("Por que este score?"):
+                        for m in mot:
+                            st.markdown(f"- {m}")
 
     if st.session_state.searched and st.session_state.jobs:
         jobs = st.session_state.jobs

@@ -735,7 +735,7 @@ def executar(args):
         envia_email(html, assunto)
     if args.telegram:
         linhas = [f"Vagas TI: {len(vagas)} vagas ({sum(v['nova'] for v in vagas)} novas)"]
-        linhas += [f"{v['score']} | {v['titulo']} | {v['url']}" for v in vagas[:5]]
+        linhas += [f"{v['score']} | {v['titulo']} | {', '.join(v.get('motivos', []))} | {v['url']}" for v in vagas[:5]]
         send_telegram("\n".join(linhas))
     return True
 
