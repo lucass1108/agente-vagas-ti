@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
 """Agente Vagas TI v6.2 - busca (Gupy/Adzuna/Bing), score, historico e email HTML."""
+import logging
+from logging.handlers import RotatingFileHandler
+
+_log_handler = RotatingFileHandler("agente.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[_log_handler, logging.StreamHandler()],
+)
+logger = logging.getLogger("agente_vagas")
+
 import os, sys, json, re, time, base64, smtplib, argparse, urllib.parse, urllib.request
 from datetime import datetime, timezone
+
+FONTES_COM_FALHA = []
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape, unescape
@@ -80,6 +93,19 @@ def limpa_html(s):
     return unescape(re.sub(r"<[^>]+>", " ", s or ""))
 
 
+def _request_com_retry(url, params=None, headers=None, timeout=15, tentativas=3):
+    for i in range(tentativas):
+        try:
+            r = requests.get(url, params=params, headers=headers or HEADERS, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            logger.warning(f"Tentativa {i+1}/{tentativas} falhou para {url}: {e}")
+            if i < tentativas - 1:
+                time.sleep(2 ** i)
+    return None
+
+
 def _pat(termo):
     t = re.escape(termo)
     # termos curtos: palavra inteira; longos: início de palavra (radicais)
@@ -110,8 +136,9 @@ def _gupy_get(termo, offset, estado):
     params = {"jobName": termo, "limit": GUPY_LIMIT, "offset": offset}
     if estado:
         params["state"] = estado
-    r = requests.get(GUPY_URL, params=params, headers=HEADERS, timeout=25)
-    r.raise_for_status()
+    r = _request_com_retry(GUPY_URL, params=params, timeout=15)
+    if r is None:
+        raise Exception("Gupy indisponível após retries")
     return r.json().get("data") or []
 
 
@@ -124,6 +151,9 @@ def buscar_gupy(termo, paginas=GUPY_PAGINAS):
                 dados = _gupy_get(termo, offset, p and estado or estado)
             except Exception as e:
                 print(f"[aviso] Gupy '{termo}': {e}")
+                logger.error(f"Gupy falhou: {e}")
+                if "Gupy" not in FONTES_COM_FALHA:
+                    FONTES_COM_FALHA.append("Gupy")
                 break
             if DEBUG and dados and p == 0 and not vagas:
                 print(f"[debug] Gupy campos: {sorted(dados[0].keys())}")
@@ -159,15 +189,17 @@ def buscar_adzuna(termo):
         if "Adzuna" not in FONTES_DESATIVADAS:
             FONTES_DESATIVADAS.append("Adzuna")
             print("[WARNING] Fonte Adzuna desativada: chaves não configuradas")
+        if "Adzuna" not in FONTES_COM_FALHA:
+            FONTES_COM_FALHA.append("Adzuna")
         return []
     vagas = []
     try:
-        r = requests.get(
-            "https://api.adzuna.com/v1/api/jobs/br/search/1",
+        r = _request_com_retry("https://api.adzuna.com/v1/api/jobs/br/search/1",
             params={"app_id": ADZUNA_ID, "app_key": ADZUNA_KEY, "what": termo,
                     "where": "São Paulo", "results_per_page": 30, "sort_by": "date"},
-            headers=HEADERS, timeout=25)
-        r.raise_for_status()
+            timeout=15)
+        if r is None:
+            raise Exception("Adzuna indisponível após retries")
         for j in r.json().get("results", []):
             vagas.append({
                 "titulo": (j.get("title") or "").strip(),
@@ -181,6 +213,9 @@ def buscar_adzuna(termo):
             })
     except Exception as e:
         print(f"[aviso] Adzuna '{termo}': {e}")
+        logger.error(f"Adzuna falhou: {e}")
+        if "Adzuna" not in FONTES_COM_FALHA and (ADZUNA_ID and ADZUNA_KEY):
+            FONTES_COM_FALHA.append("Adzuna")
     return vagas
 
 
@@ -227,11 +262,22 @@ def buscar_bing(termo):
             })
     except Exception as e:
         print(f"[aviso] Bing '{termo}': {e}")
+        logger.error(f"Bing falhou: {e}")
+        if "Bing" not in FONTES_COM_FALHA:
+            FONTES_COM_FALHA.append("Bing")
     return vagas
 
 
 def buscar_todas(termo):
-    return buscar_gupy(termo) + buscar_adzuna(termo) + buscar_bing(termo)
+    resultado = []
+    for fn, nome in ((buscar_gupy, "Gupy"), (buscar_adzuna, "Adzuna"), (buscar_bing, "Bing")):
+        try:
+            resultado += fn(termo)
+        except Exception as e:
+            logger.error(f"{nome} falhou: {e}")
+            if nome not in FONTES_COM_FALHA:
+                FONTES_COM_FALHA.append(nome)
+    return resultado
 
 
 # ---------- VALIDAÇÃO / SCORE ----------
@@ -313,6 +359,8 @@ def salva_hist(urls):
 
 # ---------- COLETA ----------
 def coletar():
+    global FONTES_COM_FALHA
+    FONTES_COM_FALHA = []
     bruto, stats = [], {}
     for t in TERMOS_BUSCA:
         for v in buscar_todas(t):
@@ -344,6 +392,8 @@ def coletar():
         v["nova"] = v["url"] not in hist
     print(f"Bruto por fonte: {stats or 'nenhuma'} | aprovadas: {len(unicas)}")
     print(f"Descartadas: {descartes}")
+    if FONTES_COM_FALHA:
+        print(f"[WARNING] Fontes com falha: {', '.join(FONTES_COM_FALHA)}")
     if FONTES_DESATIVADAS:
         print(f"[WARNING] Fontes desativadas: {', '.join(FONTES_DESATIVADAS)} (chaves não configuradas)")
     return unicas, hist, stats
@@ -411,7 +461,8 @@ style="background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:700;
 padding:12px 24px;border-radius:8px;display:inline-block">Ver todas no GitHub</a></td></tr>
 <tr><td align="center" style="padding:0 18px 18px;font-size:11px;color:#94a3b8">
 Fontes: {escape(fontes)}<br>Agente Vagas TI v6.2 · gerado automaticamente
-{"<br>Fontes desativadas: " + ", ".join(FONTES_DESATIVADAS) + " (chaves não configuradas)" if FONTES_DESATIVADAS else ""}</td></tr>
+{"<br>Fontes desativadas: " + ", ".join(FONTES_DESATIVADAS) + " (chaves não configuradas)" if FONTES_DESATIVADAS else ""}
+{"<br>Fontes com falha: " + ", ".join(FONTES_COM_FALHA) if FONTES_COM_FALHA and FONTES_COM_FALHA != FONTES_DESATIVADAS else ""}</td></tr>
 </table></td></tr></table></body></html>'''
 
 
