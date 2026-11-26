@@ -146,9 +146,12 @@ agente-vagas-ti/
 
 ## Roadmap
 
-- [ ] Testes básicos (pytest) para score e validação de vagas, rodando no GitHub Actions
-- [ ] Separar `vagas_agent.py` em módulos (`fontes/`, `score.py`, `notificacoes.py`)
+- [x] Testes básicos (pytest) para score e validação de vagas, rodando no GitHub Actions
+- [x] Logging com arquivo (agente.log), retry 3x por fonte, tolerância a falhas
+- [x] Score explicável (motivos no e-mail, Telegram e Streamlit)
+- [x] Streamlit: vagas de exemplo, filtros, exportar CSV, aviso de privacidade
 - [ ] Histórico em SQLite (deduplicação persistente)
+- [ ] Modularizar vagas_agent.py (fontes/, score.py, notificacoes/, db.py)
 - [ ] Filtros no site Streamlit (área, modalidade, data) e exportar resultados
 - [ ] Explicar por que cada vaga recebeu aquele score
 - [ ] Mostrar vagas de exemplo sem exigir currículo
