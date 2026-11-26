@@ -651,10 +651,10 @@ with st.sidebar:
     if st.session_state.admin_mode:
         page = st.radio("Menu", [
             "Buscar Vagas",
-            "Meu Curriculo",
+            "Meu Currículo",
             "Candidaturas",
             "Prep Entrevista",
-            "Curriculo Personalizado",
+            "Currículo Personalizado",
             "Analytics",
             "Agente IA",
             "Acesso Admin",
@@ -728,9 +728,9 @@ if page == "Acesso Admin":
 # PÁGINA: MEU CURRÍCULO
 # ============================================================
 elif page == "Meu Curriculo":
-    st.title("Meu Curriculo")
-    st.markdown("Cole seu curriculo abaixo para que o buscador encontre vagas compativeis com seu perfil.")
-    st.info("Privacidade: seu curriculo e processado apenas na sessao e nao e armazenado em disco nem enviado a terceiros.")
+    st.title("Meu Currículo")
+    st.markdown("Cole seu currículo abaixo para que o buscador encontre vagas compatíveis com seu perfil.")
+    st.info("Privacidade: seu curriculo e processado apenas na sessao e nao e armazenado em disco nem enviado a terceiros. No modo admin, skills e candidaturas podem ser enviadas ao Gemini para respostas contextualizadas.")
 
     st.subheader("Qual area/vaga voce busca?")
     area_options = [
