@@ -1,12 +1,11 @@
 ﻿# Ignorar tudo exceto os arquivos do projeto
 *
-!vagas_agent.py
+!.gitignore
 !README.md
 !requirements.txt
-!.gitignore
+!requirements-dev.txt
 !LICENSE
-!Vagas TI - Agente Lucas.md
-!Vagas Dashboard.base
+!vagas_agent.py
 !streamlit_app.py
 !telegram_bot.py
 !agente_busca.py
@@ -15,10 +14,18 @@
 !agente_entrevista.py
 !agente_curriculo.py
 !agente_dashboard.py
-!RELATORIO.md
+!agente_linkedin.py
+!agente_linkedin_full.py
+!agente_status.py
 !.github/
 !.github/workflows/
 !.github/workflows/vagas.yml
+!.github/workflows/tests.yml
+!tests/
+!tests/**
+!docs/
+!docs/**
+!.env.example
 
 # Python
 __pycache__/
@@ -38,4 +45,20 @@ config.local.py
 # Dados locais
 dados_locais/
 preview.html
-codigo_para_analise*.txt
+vagas.db
+*.log
+status_agente.md
+
+# Obsidian / notas pessoais do vault
+.obsidian/
+Perfil Base - Lucas.md
+Template Genérico - Candidatura.md
+Snapshot - Estado Projeto.md
+Post LinkedIn - Agente Vagas.md
+Plano - Destaque Agente Vagas TI.md
+checklist-melhorias-agente-ia.md
+Extrator de Vagas - Spec.md
+Mini-Agente LinkedIn - Spec.md
+Handoff Claude - Agente Vagas.md
+Agente Autônomo - Resumo e Script.md
+Projeto - Agente de Vagas TI.md
