@@ -7,6 +7,12 @@ from email.mime.text import MIMEText
 from html import escape, unescape
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import requests
 
 BASE = Path(__file__).parent
@@ -20,6 +26,8 @@ EMAIL_TO = os.getenv("EMAIL_TO", EMAIL_USER)
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
 ADZUNA_ID = os.getenv("ADZUNA_APP_ID", "")
 ADZUNA_KEY = os.getenv("ADZUNA_APP_KEY", "")
+
+FONTES_DESATIVADAS = []
 
 _LOCAL = Path(r"C:\Users\Pichau\Downloads\Nova pasta\Estudos TI")
 _VAULT = Path(os.environ.get("VAULT_PATH") or (_LOCAL if _LOCAL.exists() else BASE / "dados_locais"))
@@ -148,6 +156,9 @@ def buscar_gupy(termo, paginas=GUPY_PAGINAS):
 
 def buscar_adzuna(termo):
     if not (ADZUNA_ID and ADZUNA_KEY):
+        if "Adzuna" not in FONTES_DESATIVADAS:
+            FONTES_DESATIVADAS.append("Adzuna")
+            print("[WARNING] Fonte Adzuna desativada: chaves não configuradas")
         return []
     vagas = []
     try:
@@ -333,6 +344,8 @@ def coletar():
         v["nova"] = v["url"] not in hist
     print(f"Bruto por fonte: {stats or 'nenhuma'} | aprovadas: {len(unicas)}")
     print(f"Descartadas: {descartes}")
+    if FONTES_DESATIVADAS:
+        print(f"[WARNING] Fontes desativadas: {', '.join(FONTES_DESATIVADAS)} (chaves não configuradas)")
     return unicas, hist, stats
 
 
@@ -397,7 +410,8 @@ border-bottom:2px solid #4f46e5;padding-bottom:6px;margin-bottom:6px">Top {min(t
 style="background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:700;
 padding:12px 24px;border-radius:8px;display:inline-block">Ver todas no GitHub</a></td></tr>
 <tr><td align="center" style="padding:0 18px 18px;font-size:11px;color:#94a3b8">
-Fontes: {escape(fontes)}<br>Agente Vagas TI v6.2 · gerado automaticamente</td></tr>
+Fontes: {escape(fontes)}<br>Agente Vagas TI v6.2 · gerado automaticamente
+{"<br>Fontes desativadas: " + ", ".join(FONTES_DESATIVADAS) + " (chaves não configuradas)" if FONTES_DESATIVADAS else ""}</td></tr>
 </table></td></tr></table></body></html>'''
 
 
