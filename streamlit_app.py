@@ -1,3 +1,10 @@
+import logging
+try:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+except Exception:
+    pass
+logger = logging.getLogger("streamlit_app")
+
 import streamlit as st
 import json
 import os
@@ -723,6 +730,7 @@ if page == "Acesso Admin":
 elif page == "Meu Curriculo":
     st.title("Meu Curriculo")
     st.markdown("Cole seu curriculo abaixo para que o buscador encontre vagas compativeis com seu perfil.")
+    st.info("Privacidade: seu curriculo e processado apenas na sessao e nao e armazenado em disco nem enviado a terceiros.")
 
     st.subheader("Qual area/vaga voce busca?")
     area_options = [
@@ -873,7 +881,24 @@ elif page == "Buscar Vagas":
 
         st.subheader(f"Resultados ({len(scored)} vagas)")
 
-        for job in scored[:30]:
+        # Filtros
+        with st.expander("Filtros", expanded=False):
+            colf1, colf2, colf3 = st.columns(3)
+            with colf1:
+                min_score = st.slider("Score mínimo", 0, 100, 0)
+            with colf2:
+                modalidade = st.selectbox("Modalidade", ["Todas", "Remoto", "Presencial"])
+            with colf3:
+                termo_filtro = st.text_input("Filtrar por texto", "")
+            filtered = [j for j in scored if score_job_generic(j, skills) >= min_score]
+            if termo_filtro:
+                filtered = [j for j in filtered if termo_filtro.lower() in (j.get("title","")+j.get("description","")).lower()]
+            if modalidade != "Todas":
+                filtered = [j for j in filtered if modalidade.lower() in (j.get("title","")+j.get("description","")).lower() or (modalidade == "Remoto" and "remoto" in (j.get("title","")+j.get("description","")).lower())]
+
+        st.subheader(f"Resultados filtrados ({len(filtered)} vagas)")
+
+        for job in filtered[:30]:
             s = score_job_generic(job, skills)
             color_class = "score-high" if s >= 70 else ("score-med" if s >= 40 else "score-low")
             with st.expander(f"[{s}] {job['title'][:70]}"):
@@ -881,11 +906,20 @@ elif page == "Buscar Vagas":
                 st.markdown(f"**Fonte:** {job.get('source', '?')}")
                 st.markdown(f"**Descricao:** {job['description'][:200]}")
                 st.markdown(f"**Link:** [{job['link']}]({job['link']})")
-
                 job_text = (job.get("title", "") + " " + job.get("description", "")).lower()
                 matched = [sk for sk in skills if sk in job_text]
                 if matched:
                     st.markdown("**Skills que combinam:** " + ", ".join(matched))
+
+        # Exportar CSV
+        if filtered:
+            import csv, io
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["titulo", "score", "fonte", "link", "descricao"])
+            for job in filtered:
+                w.writerow([job.get("title",""), score_job_generic(job, skills), job.get("source",""), job.get("link",""), job.get("description","")[:200]])
+            st.download_button("Exportar CSV", buf.getvalue(), file_name="vagas_filtradas.csv", mime="text/csv")
 
 # ============================================================
 # PÁGINAS ADMIN
